@@ -2,3 +2,7 @@ keystore/
 goplaxt
 goplaxt-docker
 run.sh
+
+/.idea/
+/dist/
+/.envrc
