@@ -162,7 +162,7 @@ func findEpisode(pr plexhooks.PlexResponse) Episode {
 
 func findMovie(pr plexhooks.PlexResponse) Movie {
 	log.Print(fmt.Sprintf("Finding movie for %s (%d)", pr.Metadata.Title, pr.Metadata.Year))
-	url := fmt.Sprintf("https://api.trakt.tv/search/movie?query=%s", url.PathEscape(pr.Metadata.Title))
+	url := fmt.Sprintf("https://api.trakt.tv/search/movie?query=%s&fields=title", url.PathEscape(pr.Metadata.Title))
 
 	respBody := makeRequest(url)
 
