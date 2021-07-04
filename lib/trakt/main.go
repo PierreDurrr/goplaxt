@@ -162,9 +162,20 @@ func findEpisode(pr plexhooks.PlexResponse) Episode {
 
 func findMovie(pr plexhooks.PlexResponse) Movie {
 	log.Print(fmt.Sprintf("Finding movie for %s (%d)", pr.Metadata.Title, pr.Metadata.Year))
-	url := fmt.Sprintf("https://api.trakt.tv/search/movie?query=%s&fields=title", url.PathEscape(pr.Metadata.Title))
 
-	respBody := makeRequest(url)
+	var URL string
+	var searchById bool
+	if pr.Metadata.ExternalGuid != nil && len(pr.Metadata.ExternalGuid) > 0 {
+		traktService := pr.Metadata.ExternalGuid[0].Id[:4]
+		movieId := pr.Metadata.ExternalGuid[0].Id[7:]
+
+		URL = fmt.Sprintf("https://api.trakt.tv/search/%s/%s?type=movie", traktService, movieId)
+		searchById = true
+	} else {
+		URL = fmt.Sprintf("https://api.trakt.tv/search/movie?query=%s&fields=title", url.PathEscape(pr.Metadata.Title))
+		searchById = false
+	}
+	respBody := makeRequest(URL)
 
 	var results []MovieSearchResult
 
@@ -172,7 +183,7 @@ func findMovie(pr plexhooks.PlexResponse) Movie {
 	handleErr(err)
 
 	for _, result := range results {
-		if result.Movie.Year == pr.Metadata.Year {
+		if result.Movie.Year == pr.Metadata.Year || searchById {
 			return result.Movie
 		}
 	}
