@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"strings"
 
 	"github.com/xanderstrike/goplaxt/lib/store"
 	"github.com/xanderstrike/plexhooks"
@@ -83,17 +84,26 @@ func HandleMovie(pr plexhooks.PlexResponse, accessToken string) {
 }
 
 func findEpisode(pr plexhooks.PlexResponse) Episode {
-	var traktService = "tvdb"
+	var traktService string
 	var showID []string
 
-	re := regexp.MustCompile("tvdb://(\\d*)/(\\d*)/(\\d*)")
-	showID = re.FindStringSubmatch(pr.Metadata.Guid)
-
-	// If Plaxt can't find with TVDB, retry with TheMovieDB
-	if showID == nil {
-		re := regexp.MustCompile("themoviedb://(\\d*)/(\\d*)/(\\d*)")
-		showID = re.FindStringSubmatch(pr.Metadata.Guid)
-		traktService = "tmdb"
+	if u, err := url.Parse(pr.Metadata.Guid); err == nil {
+		var re *regexp.Regexp
+		if strings.HasSuffix(u.Scheme, "tvdb") {
+			traktService = "tvdb"
+			re = regexp.MustCompile("tvdb://(\\d*)/(\\d*)/(\\d*)")
+		} else if strings.HasSuffix(u.Scheme, "themoviedb") {
+			traktService = "tmdb"
+			re = regexp.MustCompile("themoviedb://(\\d*)/(\\d*)/(\\d*)")
+		} else if strings.HasSuffix(u.Scheme, "hama") {
+			if strings.HasPrefix(u.Host, "tvdb-") || strings.HasPrefix(u.Host, "tvdb2-") {
+				traktService = "tvdb"
+				re = regexp.MustCompile("hama://tvdb2?-(\\d*)/(\\d*)/(\\d*)")
+			}
+		}
+		if re != nil {
+			showID = re.FindStringSubmatch(pr.Metadata.Guid)
+		}
 	}
 
 	// If Plaxt can't find with TheMovieDB either, retry with the new Plex TV agent
