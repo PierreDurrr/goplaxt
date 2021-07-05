@@ -87,27 +87,7 @@ func findEpisode(pr plexhooks.PlexResponse) Episode {
 	var traktService string
 	var showID []string
 
-	if u, err := url.Parse(pr.Metadata.Guid); err == nil {
-		var re *regexp.Regexp
-		if strings.HasSuffix(u.Scheme, "tvdb") {
-			traktService = "tvdb"
-			re = regexp.MustCompile("tvdb://(\\d*)/(\\d*)/(\\d*)")
-		} else if strings.HasSuffix(u.Scheme, "themoviedb") {
-			traktService = "tmdb"
-			re = regexp.MustCompile("themoviedb://(\\d*)/(\\d*)/(\\d*)")
-		} else if strings.HasSuffix(u.Scheme, "hama") {
-			if strings.HasPrefix(u.Host, "tvdb-") || strings.HasPrefix(u.Host, "tvdb2-") {
-				traktService = "tvdb"
-				re = regexp.MustCompile("hama://tvdb2?-(\\d*)/(\\d*)/(\\d*)")
-			}
-		}
-		if re != nil {
-			showID = re.FindStringSubmatch(pr.Metadata.Guid)
-		}
-	}
-
-	// If Plaxt can't find with TheMovieDB either, retry with the new Plex TV agent
-	if showID == nil {
+	if len(pr.Metadata.ExternalGuid) > 0 {
 		var episodeID string
 
 		log.Println("Finding episode with new Plex TV agent")
@@ -130,19 +110,43 @@ func findEpisode(pr plexhooks.PlexResponse) Episode {
 		return showInfo[0].Episode
 	}
 
-	url := fmt.Sprintf("https://api.trakt.tv/search/%s/%s?type=show", traktService, showID[1])
+	u, err := url.Parse(pr.Metadata.Guid)
+	handleErr(err)
+
+	var re *regexp.Regexp
+	if strings.HasSuffix(u.Scheme, "tvdb") {
+		traktService = "tvdb"
+		re = regexp.MustCompile("tvdb://(\\d*)/(\\d*)/(\\d*)")
+	} else if strings.HasSuffix(u.Scheme, "themoviedb") {
+		traktService = "tmdb"
+		re = regexp.MustCompile("themoviedb://(\\d*)/(\\d*)/(\\d*)")
+	} else if strings.HasSuffix(u.Scheme, "hama") {
+		if strings.HasPrefix(u.Host, "tvdb-") || strings.HasPrefix(u.Host, "tvdb2-") {
+			traktService = "tvdb"
+			re = regexp.MustCompile("hama://tvdb2?-(\\d*)/(\\d*)/(\\d*)")
+		}
+	}
+	if re == nil {
+		panic(fmt.Sprintf("Unidentified guid: %s", pr.Metadata.Guid))
+	}
+	showID = re.FindStringSubmatch(pr.Metadata.Guid)
+	if showID == nil {
+		panic(fmt.Sprintf("Unmatched guid: %s", pr.Metadata.Guid))
+	}
+
+	URL := fmt.Sprintf("https://api.trakt.tv/search/%s/%s?type=show", traktService, showID[1])
 
 	log.Print(fmt.Sprintf("Finding show for %s %s %s using %s", showID[1], showID[2], showID[3], traktService))
 
-	respBody := makeRequest(url)
+	respBody := makeRequest(URL)
 
 	var showInfo []ShowInfo
-	err := json.Unmarshal(respBody, &showInfo)
+	err = json.Unmarshal(respBody, &showInfo)
 	handleErr(err)
 
-	url = fmt.Sprintf("https://api.trakt.tv/shows/%d/seasons?extended=episodes", showInfo[0].Show.Ids.Trakt)
+	URL = fmt.Sprintf("https://api.trakt.tv/shows/%d/seasons?extended=episodes", showInfo[0].Show.Ids.Trakt)
 
-	respBody = makeRequest(url)
+	respBody = makeRequest(URL)
 	var seasons []Season
 	err = json.Unmarshal(respBody, &seasons)
 	handleErr(err)
@@ -165,7 +169,7 @@ func findMovie(pr plexhooks.PlexResponse) Movie {
 
 	var URL string
 	var searchById bool
-	if pr.Metadata.ExternalGuid != nil && len(pr.Metadata.ExternalGuid) > 0 {
+	if len(pr.Metadata.ExternalGuid) > 0 {
 		traktService := pr.Metadata.ExternalGuid[0].Id[:4]
 		movieId := pr.Metadata.ExternalGuid[0].Id[7:]
 
@@ -212,9 +216,9 @@ func makeRequest(url string) []byte {
 func scrobbleRequest(action string, body []byte, accessToken string) []byte {
 	client := &http.Client{}
 
-	url := fmt.Sprintf("https://api.trakt.tv/scrobble/%s", action)
+	URL := fmt.Sprintf("https://api.trakt.tv/scrobble/%s", action)
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	req, err := http.NewRequest("POST", URL, bytes.NewBuffer(body))
 	handleErr(err)
 
 	req.Header.Add("Content-Type", "application/json")
