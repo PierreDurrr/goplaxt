@@ -75,9 +75,32 @@ func api(w http.ResponseWriter, r *http.Request) {
 	id := args["id"][0]
 	log.Print(fmt.Sprintf("Webhook call for %s", id))
 
-	user := storage.GetUser(id)
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 
-	if (user == nil) {
+	regex := regexp.MustCompile("({.*})") // not the best way really
+	match := regex.FindStringSubmatch(string(body))
+	re, err := plexhooks.ParseWebhook([]byte(match[0]))
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	user := storage.GetUser(id)
+	if user == nil {
+		log.Println("id is invalid")
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+	username := strings.ToLower(re.Account.Title)
+	if re.Owner && username != user.Username {
+		user = storage.GetUserByName(strings.ToLower(re.Account.Title))
+	}
+
+	if user == nil {
 		log.Println("User not found.")
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode("user not found")
@@ -100,21 +123,7 @@ func api(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	body, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		panic(err)
-	}
-
-	regex := regexp.MustCompile("({.*})") // not the best way really
-	match := regex.FindStringSubmatch(string(body))
-	re, err := plexhooks.ParseWebhook([]byte(match[0]))
-	if err != nil {
-		panic(err)
-	}
-
-	// re := plexhooks.ParseWebhook([]byte(match[0]))
-
-	if strings.ToLower(re.Account.Title) == user.Username {
+	if username == user.Username {
 		// FIXME - make everything take the pointer
 		trakt.Handle(re, *user)
 	} else {
@@ -168,6 +177,9 @@ func main() {
 	if os.Getenv("POSTGRESQL_URL") != "" {
 		storage = store.NewPostgresqlStore(store.NewPostgresqlClient(os.Getenv("POSTGRESQL_URL")))
 		log.Println("Using postgresql storage:", os.Getenv("POSTGRESQL_URL"))
+	} else if os.Getenv("REDIS_URL") != "" {
+		storage = store.NewRedisStore(store.NewRedisClientWithUrl(os.Getenv("REDIS_URL")))
+		log.Println("Using redis storage: ", os.Getenv("REDIS_URL"))
 	} else if os.Getenv("REDIS_URI") != "" {
 		storage = store.NewRedisStore(store.NewRedisClient(os.Getenv("REDIS_URI"), os.Getenv("REDIS_PASSWORD")))
 		log.Println("Using redis storage:", os.Getenv("REDIS_URI"))

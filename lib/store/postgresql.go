@@ -114,6 +114,11 @@ func (s PostgresqlStore) GetUser(id string) *User {
 	return &user
 }
 
+// GetUserByName will load a user from postgres
+func (s PostgresqlStore) GetUserByName(username string) *User {
+	return nil
+}
+
 // TODO: Not Implemented
 func (s PostgresqlStore) DeleteUser(id string) bool {
 	return true

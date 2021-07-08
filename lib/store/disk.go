@@ -61,6 +61,11 @@ func (s DiskStore) GetUser(id string) *User {
 	return &user
 }
 
+// GetUserByName will load a user from disk
+func (s DiskStore) GetUserByName(username string) *User {
+	return nil
+}
+
 func (s DiskStore) DeleteUser(id string) bool {
 	s.eraseField(id, "username")
 	s.eraseField(id, "updated")
@@ -80,7 +85,7 @@ func (s DiskStore) readField(id, field string) (string, error) {
 	return s.read(fmt.Sprintf("%s.%s", id, field))
 }
 
-func (s DiskStore) eraseField(id, field string) (error) {
+func (s DiskStore) eraseField(id, field string) error {
 	d := diskv.New(diskv.Options{
 		BasePath:     "keystore",
 		Transform:    flatTransform,

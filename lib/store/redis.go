@@ -29,6 +29,21 @@ func NewRedisClient(addr string, password string) redis.Client {
 	return *client
 }
 
+// NewRedisClientWithUrl creates a new redis client object
+func NewRedisClientWithUrl(url string) redis.Client {
+	option, err := redis.ParseURL(url)
+	if err != nil {
+		panic(err)
+	}
+
+	client := redis.NewClient(option)
+	_, err = client.Ping().Result()
+	if err != nil {
+		panic(err)
+	}
+	return *client
+}
+
 // NewRedisStore creates new store
 func NewRedisStore(client redis.Client) RedisStore {
 	return RedisStore{
@@ -44,25 +59,29 @@ func (s RedisStore) Ping(ctx context.Context) error {
 
 // WriteUser will write a user object to redis
 func (s RedisStore) WriteUser(user User) {
+	pipe := s.client.Pipeline()
 	data := make(map[string]interface{})
 	data["username"] = user.Username
 	data["access"] = user.AccessToken
 	data["refresh"] = user.RefreshToken
 	data["updated"] = user.Updated.Format("01-02-2006")
-	s.client.HMSet("goplaxt:user:"+user.ID, data)
+	pipe.HMSet("goplaxt:user:"+user.ID, data)
+	pipe.Set("goplaxt:usermap:"+user.Username, user.ID, 0)
+	_, err := pipe.Exec()
+	if err != nil {
+		panic(err)
+	}
 }
 
 // GetUser will load a user from redis
 func (s RedisStore) GetUser(id string) *User {
 	data, err := s.client.HGetAll("goplaxt:user:" + id).Result()
-	// FIXME - return err
 	if err != nil {
-		panic(err)
+		return nil
 	}
 	updated, err := time.Parse("01-02-2006", data["updated"])
-	// FIXME - return err
 	if err != nil {
-		panic(err)
+		return nil
 	}
 	user := User{
 		ID:           id,
@@ -76,7 +95,17 @@ func (s RedisStore) GetUser(id string) *User {
 	return &user
 }
 
-// TODO: Not Implemented
+// GetUserByName will load a user from redis
+func (s RedisStore) GetUserByName(username string) *User {
+	id, err := s.client.Get("goplaxt:usermap:" + username).Result()
+	if err != nil {
+		return nil
+	}
+	return s.GetUser(id)
+}
+
+// DeleteUser will delete a user from redis
 func (s RedisStore) DeleteUser(id string) bool {
-	return true
+	err := s.client.Del("goplaxt:user:" + id).Err()
+	return err == nil
 }
