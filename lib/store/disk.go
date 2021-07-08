@@ -23,6 +23,14 @@ func (s DiskStore) Ping(ctx context.Context) error {
 	return nil
 }
 
+// WriteServer TODO: not implemented
+func (s DiskStore) WriteServer(serverUuid string) {
+}
+
+func (s DiskStore) GetServer(serverUuid string) bool {
+	return false
+}
+
 // WriteUser will write a user object to disk
 func (s DiskStore) WriteUser(user User) {
 	s.writeField(user.ID, "username", user.Username)

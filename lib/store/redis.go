@@ -57,6 +57,16 @@ func (s RedisStore) Ping(ctx context.Context) error {
 	return err
 }
 
+// WriteServer will write a server uuid to redis
+func (s RedisStore) WriteServer(serverUuid string) {
+	s.client.SetNX("goplaxt:server"+serverUuid, serverUuid, 0)
+}
+
+func (s RedisStore) GetServer(serverUuid string) bool {
+	count := s.client.Exists("goplaxt:server" + serverUuid).Val()
+	return count > 0
+}
+
 // WriteUser will write a user object to redis
 func (s RedisStore) WriteUser(user User) {
 	pipe := s.client.Pipeline()
