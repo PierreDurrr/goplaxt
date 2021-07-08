@@ -46,18 +46,21 @@ func AuthRequest(root, username, code, refreshToken, grantType string) (map[stri
 
 // Handle determine if an item is a show or a movie
 func Handle(pr plexhooks.PlexResponse, user store.User) {
+	event, progress := getAction(pr)
+	if event == "" {
+		log.Printf("Unrecognized event: %s", pr.Event)
+		return
+	}
 	if pr.Metadata.LibrarySectionType == "show" {
-		HandleShow(pr, user.AccessToken)
+		HandleShow(pr, event, progress, user.AccessToken)
 	} else if pr.Metadata.LibrarySectionType == "movie" {
-		HandleMovie(pr, user.AccessToken)
+		HandleMovie(pr, event, progress, user.AccessToken)
 	}
 	log.Print("Event logged")
 }
 
 // HandleShow start the scrobbling for a show
-func HandleShow(pr plexhooks.PlexResponse, accessToken string) {
-	event, progress := getAction(pr)
-
+func HandleShow(pr plexhooks.PlexResponse, event string, progress int, accessToken string) {
 	scrobbleObject := ShowScrobbleBody{
 		Progress: progress,
 		Episode:  findEpisode(pr),
@@ -70,9 +73,7 @@ func HandleShow(pr plexhooks.PlexResponse, accessToken string) {
 }
 
 // HandleMovie start the scrobbling for a movie
-func HandleMovie(pr plexhooks.PlexResponse, accessToken string) {
-	event, progress := getAction(pr)
-
+func HandleMovie(pr plexhooks.PlexResponse, event string, progress int, accessToken string) {
 	scrobbleObject := MovieScrobbleBody{
 		Progress: progress,
 		Movie:    findMovie(pr),
