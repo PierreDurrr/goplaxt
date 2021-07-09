@@ -22,7 +22,12 @@ import (
 	"github.com/xanderstrike/plexhooks"
 )
 
-var storage store.Store
+var (
+	version string
+	commit  string
+	date    string
+	storage store.Store
+)
 
 type AuthorizePage struct {
 	SelfRoot   string
@@ -181,7 +186,7 @@ func healthcheckHandler() http.Handler {
 }
 
 func main() {
-	log.Print("Started!")
+	log.Printf("Started version=\"%s (%s@%s)\"", version, commit, date)
 	if os.Getenv("POSTGRESQL_URL") != "" {
 		storage = store.NewPostgresqlStore(store.NewPostgresqlClient(os.Getenv("POSTGRESQL_URL")))
 		log.Println("Using postgresql storage:", os.Getenv("POSTGRESQL_URL"))
