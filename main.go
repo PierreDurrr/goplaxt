@@ -71,16 +71,16 @@ func authorize(w http.ResponseWriter, r *http.Request) {
 }
 
 func api(w http.ResponseWriter, r *http.Request) {
-	args := r.URL.Query()
-	id := args["id"][0]
-	log.Print(fmt.Sprintf("Webhook call for %s", id))
-
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-
 	regex := regexp.MustCompile("({.*})") // not the best way really
 	match := regex.FindStringSubmatch(string(body))
 	re, err := plexhooks.ParseWebhook([]byte(match[0]))
@@ -88,6 +88,7 @@ func api(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	log.Print(fmt.Sprintf("Webhook call for %s (%s)", id, re.Account.Title))
 
 	user := storage.GetUser(id)
 	if user == nil {
