@@ -128,6 +128,6 @@ func (s PostgresqlStore) GetUserByName(username string) *User {
 }
 
 // TODO: Not Implemented
-func (s PostgresqlStore) DeleteUser(id string) bool {
+func (s PostgresqlStore) DeleteUser(id, username string) bool {
 	return true
 }

@@ -11,7 +11,7 @@ type Store interface {
 	WriteUser(user User)
 	GetUser(id string) *User
 	GetUserByName(username string) *User
-	DeleteUser(id string) bool
+	DeleteUser(id, username string) bool
 	Ping(ctx context.Context) error
 }
 

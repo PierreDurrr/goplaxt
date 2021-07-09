@@ -8,6 +8,12 @@ import (
 	"github.com/go-redis/redis"
 )
 
+const (
+	serverPrefix  = "goplaxt:server:"
+	userPrefix    = "goplaxt:user:"
+	userMapPrefix = "goplaxt:usermap:"
+)
+
 // RedisStore is a storage engine that writes to redis
 type RedisStore struct {
 	client redis.Client
@@ -59,24 +65,28 @@ func (s RedisStore) Ping(ctx context.Context) error {
 
 // WriteServer will write a server uuid to redis
 func (s RedisStore) WriteServer(serverUuid string) {
-	s.client.SetNX("goplaxt:server"+serverUuid, serverUuid, 0)
+	s.client.SetNX(serverPrefix+serverUuid, serverUuid, 0)
 }
 
 func (s RedisStore) GetServer(serverUuid string) bool {
-	count := s.client.Exists("goplaxt:server" + serverUuid).Val()
+	count := s.client.Exists(serverPrefix + serverUuid).Val()
 	return count > 0
 }
 
 // WriteUser will write a user object to redis
 func (s RedisStore) WriteUser(user User) {
+	oldId := s.client.Get(userMapPrefix + user.Username).String()
 	pipe := s.client.Pipeline()
 	data := make(map[string]interface{})
 	data["username"] = user.Username
 	data["access"] = user.AccessToken
 	data["refresh"] = user.RefreshToken
 	data["updated"] = user.Updated.Format("01-02-2006")
-	pipe.HMSet("goplaxt:user:"+user.ID, data)
-	pipe.Set("goplaxt:usermap:"+user.Username, user.ID, 0)
+	pipe.HMSet(userPrefix+user.ID, data)
+	pipe.Set(userMapPrefix+user.Username, user.ID, 0)
+	if oldId != "" {
+		pipe.Del(userPrefix + oldId)
+	}
 	_, err := pipe.Exec()
 	if err != nil {
 		panic(err)
@@ -85,7 +95,7 @@ func (s RedisStore) WriteUser(user User) {
 
 // GetUser will load a user from redis
 func (s RedisStore) GetUser(id string) *User {
-	data, err := s.client.HGetAll("goplaxt:user:" + id).Result()
+	data, err := s.client.HGetAll(userPrefix + id).Result()
 	if err != nil {
 		return nil
 	}
@@ -107,7 +117,7 @@ func (s RedisStore) GetUser(id string) *User {
 
 // GetUserByName will load a user from redis
 func (s RedisStore) GetUserByName(username string) *User {
-	id, err := s.client.Get("goplaxt:usermap:" + username).Result()
+	id, err := s.client.Get(userMapPrefix + username).Result()
 	if err != nil {
 		return nil
 	}
@@ -115,7 +125,10 @@ func (s RedisStore) GetUserByName(username string) *User {
 }
 
 // DeleteUser will delete a user from redis
-func (s RedisStore) DeleteUser(id string) bool {
-	err := s.client.Del("goplaxt:user:" + id).Err()
+func (s RedisStore) DeleteUser(id, username string) bool {
+	pipe := s.client.Pipeline()
+	pipe.Del(userPrefix + id)
+	pipe.Del(userMapPrefix + username)
+	_, err := pipe.Exec()
 	return err == nil
 }

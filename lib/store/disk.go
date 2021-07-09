@@ -74,7 +74,7 @@ func (s DiskStore) GetUserByName(username string) *User {
 	return nil
 }
 
-func (s DiskStore) DeleteUser(id string) bool {
+func (s DiskStore) DeleteUser(id, username string) bool {
 	s.eraseField(id, "username")
 	s.eraseField(id, "updated")
 	s.eraseField(id, "access")

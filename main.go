@@ -131,7 +131,7 @@ func api(w http.ResponseWriter, r *http.Request) {
 			log.Println("Refresh failed, skipping and deleting user")
 			w.WriteHeader(http.StatusUnauthorized)
 			json.NewEncoder(w).Encode("fail")
-			storage.DeleteUser(user.ID)
+			storage.DeleteUser(user.ID, user.Username)
 			return
 		}
 	}
