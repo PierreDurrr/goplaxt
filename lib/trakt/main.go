@@ -84,6 +84,8 @@ func HandleMovie(pr plexhooks.PlexResponse, event string, progress int, accessTo
 	scrobbleRequest(event, scrobbleJSON, accessToken)
 }
 
+var episodeRegex = regexp.MustCompile("(\\d+)/(\\d+)/(\\d+)")
+
 func findEpisode(pr plexhooks.PlexResponse) Episode {
 	var traktService string
 	var showID []string
@@ -114,23 +116,19 @@ func findEpisode(pr plexhooks.PlexResponse) Episode {
 	u, err := url.Parse(pr.Metadata.Guid)
 	handleErr(err)
 
-	var re *regexp.Regexp
 	if strings.HasSuffix(u.Scheme, "tvdb") {
 		traktService = "tvdb"
-		re = regexp.MustCompile("tvdb://(\\d*)/(\\d*)/(\\d*)")
 	} else if strings.HasSuffix(u.Scheme, "themoviedb") {
 		traktService = "tmdb"
-		re = regexp.MustCompile("themoviedb://(\\d*)/(\\d*)/(\\d*)")
 	} else if strings.HasSuffix(u.Scheme, "hama") {
 		if strings.HasPrefix(u.Host, "tvdb-") || strings.HasPrefix(u.Host, "tvdb2-") {
 			traktService = "tvdb"
-			re = regexp.MustCompile("hama://tvdb2?-(\\d*)/(\\d*)/(\\d*)")
 		}
 	}
-	if re == nil {
+	if traktService == "" {
 		panic(fmt.Sprintf("Unidentified guid: %s", pr.Metadata.Guid))
 	}
-	showID = re.FindStringSubmatch(pr.Metadata.Guid)
+	showID = episodeRegex.FindStringSubmatch(pr.Metadata.Guid)
 	if showID == nil {
 		panic(fmt.Sprintf("Unmatched guid: %s", pr.Metadata.Guid))
 	}
