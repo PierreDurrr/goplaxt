@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"strings"
 
@@ -16,13 +15,21 @@ import (
 	"github.com/xanderstrike/plexhooks"
 )
 
+func New(clientId, clientSecret string, storage store.Store) *Trakt {
+	return &Trakt{
+		clientId:     clientId,
+		clientSecret: clientSecret,
+		storage:      storage,
+	}
+}
+
 // AuthRequest authorize the connection with Trakt
-func AuthRequest(root, username, code, refreshToken, grantType string) (map[string]interface{}, bool) {
+func (t Trakt) AuthRequest(root, username, code, refreshToken, grantType string) (map[string]interface{}, bool) {
 	values := map[string]string{
 		"code":          code,
 		"refresh_token": refreshToken,
-		"client_id":     os.Getenv("TRAKT_ID"),
-		"client_secret": os.Getenv("TRAKT_SECRET"),
+		"client_id":     t.clientId,
+		"client_secret": t.clientSecret,
 		"redirect_uri":  fmt.Sprintf("%s/authorize?username=%s", root, url.PathEscape(username)),
 		"grant_type":    grantType,
 	}
@@ -45,48 +52,48 @@ func AuthRequest(root, username, code, refreshToken, grantType string) (map[stri
 }
 
 // Handle determine if an item is a show or a movie
-func Handle(pr plexhooks.PlexResponse, user store.User) {
+func (t Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
 	event, progress := getAction(pr)
 	if event == "" {
 		log.Printf("Unrecognized event: %s", pr.Event)
 		return
 	}
 	if pr.Metadata.LibrarySectionType == "show" {
-		HandleShow(pr, event, progress, user.AccessToken)
+		t.handleShow(pr, event, progress, user.AccessToken)
 	} else if pr.Metadata.LibrarySectionType == "movie" {
-		HandleMovie(pr, event, progress, user.AccessToken)
+		t.handleMovie(pr, event, progress, user.AccessToken)
 	}
 	log.Print("Event logged")
 }
 
-// HandleShow start the scrobbling for a show
-func HandleShow(pr plexhooks.PlexResponse, event string, progress int, accessToken string) {
+// handleShow start the scrobbling for a show
+func (t Trakt) handleShow(pr plexhooks.PlexResponse, event string, progress int, accessToken string) {
 	scrobbleObject := ShowScrobbleBody{
 		Progress: progress,
-		Episode:  findEpisode(pr),
+		Episode:  t.findEpisode(pr),
 	}
 
 	scrobbleJSON, err := json.Marshal(scrobbleObject)
 	handleErr(err)
 
-	scrobbleRequest(event, scrobbleJSON, accessToken)
+	t.scrobbleRequest(event, scrobbleJSON, accessToken)
 }
 
-// HandleMovie start the scrobbling for a movie
-func HandleMovie(pr plexhooks.PlexResponse, event string, progress int, accessToken string) {
+// handleMovie start the scrobbling for a movie
+func (t Trakt) handleMovie(pr plexhooks.PlexResponse, event string, progress int, accessToken string) {
 	scrobbleObject := MovieScrobbleBody{
 		Progress: progress,
-		Movie:    findMovie(pr),
+		Movie:    t.findMovie(pr),
 	}
 
 	scrobbleJSON, _ := json.Marshal(scrobbleObject)
 
-	scrobbleRequest(event, scrobbleJSON, accessToken)
+	t.scrobbleRequest(event, scrobbleJSON, accessToken)
 }
 
 var episodeRegex = regexp.MustCompile("(\\d+)/(\\d+)/(\\d+)")
 
-func findEpisode(pr plexhooks.PlexResponse) Episode {
+func (t Trakt) findEpisode(pr plexhooks.PlexResponse) Episode {
 	var traktService string
 	var showID []string
 
@@ -102,7 +109,7 @@ func findEpisode(pr plexhooks.PlexResponse) Episode {
 		// so we need to do things a bit differently
 		URL := fmt.Sprintf("https://api.trakt.tv/search/%s/%s?type=episode", traktService, episodeID)
 
-		respBody := makeRequest(URL)
+		respBody := t.makeRequest(URL)
 
 		var showInfo []ShowInfo
 		err := json.Unmarshal(respBody, &showInfo)
@@ -137,7 +144,7 @@ func findEpisode(pr plexhooks.PlexResponse) Episode {
 
 	log.Print(fmt.Sprintf("Finding show for %s %s %s using %s", showID[1], showID[2], showID[3], traktService))
 
-	respBody := makeRequest(URL)
+	respBody := t.makeRequest(URL)
 
 	var showInfo []ShowInfo
 	err = json.Unmarshal(respBody, &showInfo)
@@ -145,7 +152,7 @@ func findEpisode(pr plexhooks.PlexResponse) Episode {
 
 	URL = fmt.Sprintf("https://api.trakt.tv/shows/%d/seasons?extended=episodes", showInfo[0].Show.Ids.Trakt)
 
-	respBody = makeRequest(URL)
+	respBody = t.makeRequest(URL)
 	var seasons []Season
 	err = json.Unmarshal(respBody, &seasons)
 	handleErr(err)
@@ -163,7 +170,7 @@ func findEpisode(pr plexhooks.PlexResponse) Episode {
 	panic("Could not find episode!")
 }
 
-func findMovie(pr plexhooks.PlexResponse) Movie {
+func (t Trakt) findMovie(pr plexhooks.PlexResponse) Movie {
 	log.Print(fmt.Sprintf("Finding movie for %s (%d)", pr.Metadata.Title, pr.Metadata.Year))
 
 	var URL string
@@ -178,7 +185,7 @@ func findMovie(pr plexhooks.PlexResponse) Movie {
 		URL = fmt.Sprintf("https://api.trakt.tv/search/movie?query=%s&fields=title", url.PathEscape(pr.Metadata.Title))
 		searchById = false
 	}
-	respBody := makeRequest(URL)
+	respBody := t.makeRequest(URL)
 
 	var results []MovieSearchResult
 
@@ -193,7 +200,12 @@ func findMovie(pr plexhooks.PlexResponse) Movie {
 	panic("Could not find movie!")
 }
 
-func makeRequest(url string) []byte {
+func (t Trakt) makeRequest(url string) []byte {
+	respBody := t.storage.GetResponse(url)
+	if respBody != nil {
+		return respBody
+	}
+
 	client := &http.Client{}
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -201,18 +213,19 @@ func makeRequest(url string) []byte {
 
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("trakt-api-version", "2")
-	req.Header.Add("trakt-api-key", os.Getenv("TRAKT_ID"))
+	req.Header.Add("trakt-api-key", t.clientId)
 
 	resp, err := client.Do(req)
 	handleErr(err)
 	defer resp.Body.Close()
 
-	respBody, _ := ioutil.ReadAll(resp.Body)
+	respBody, _ = ioutil.ReadAll(resp.Body)
+	t.storage.WriteResponse(url, respBody)
 
 	return respBody
 }
 
-func scrobbleRequest(action string, body []byte, accessToken string) []byte {
+func (t Trakt) scrobbleRequest(action string, body []byte, accessToken string) []byte {
 	client := &http.Client{}
 
 	URL := fmt.Sprintf("https://api.trakt.tv/scrobble/%s", action)
@@ -223,7 +236,7 @@ func scrobbleRequest(action string, body []byte, accessToken string) []byte {
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", accessToken))
 	req.Header.Add("trakt-api-version", "2")
-	req.Header.Add("trakt-api-key", os.Getenv("TRAKT_ID"))
+	req.Header.Add("trakt-api-key", t.clientId)
 
 	resp, _ := client.Do(req)
 	defer resp.Body.Close()

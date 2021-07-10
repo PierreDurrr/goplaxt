@@ -9,9 +9,11 @@ import (
 )
 
 const (
-	serverPrefix  = "goplaxt:server:"
-	userPrefix    = "goplaxt:user:"
-	userMapPrefix = "goplaxt:usermap:"
+	serverPrefix    = "goplaxt:server:"
+	userPrefix      = "goplaxt:user:"
+	userMapPrefix   = "goplaxt:usermap:"
+	responsePrefix  = "goplaxt:response:"
+	responseTimeout = time.Hour
 )
 
 // RedisStore is a storage engine that writes to redis
@@ -131,4 +133,16 @@ func (s RedisStore) DeleteUser(id, username string) bool {
 	pipe.Del(userMapPrefix + username)
 	_, err := pipe.Exec()
 	return err == nil
+}
+
+func (s RedisStore) GetResponse(url string) []byte {
+	response, err := s.client.Get(responsePrefix + url).Bytes()
+	if err != nil {
+		return nil
+	}
+	return response
+}
+
+func (s RedisStore) WriteResponse(url string, response []byte) {
+	s.client.Set(responsePrefix+url, response, responseTimeout)
 }

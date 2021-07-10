@@ -12,6 +12,8 @@ type Store interface {
 	GetUser(id string) *User
 	GetUserByName(username string) *User
 	DeleteUser(id, username string) bool
+	GetResponse(url string) []byte
+	WriteResponse(url string, response []byte)
 	Ping(ctx context.Context) error
 }
 

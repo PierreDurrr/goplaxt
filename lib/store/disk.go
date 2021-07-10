@@ -82,6 +82,13 @@ func (s DiskStore) DeleteUser(id, username string) bool {
 	return true
 }
 
+func (s DiskStore) GetResponse(url string) []byte {
+	return nil
+}
+
+func (s DiskStore) WriteResponse(url string, response []byte) {
+}
+
 func (s DiskStore) writeField(id, field, value string) {
 	err := s.write(fmt.Sprintf("%s.%s", id, field), value)
 	if err != nil {

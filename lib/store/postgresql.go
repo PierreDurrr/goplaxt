@@ -131,3 +131,10 @@ func (s PostgresqlStore) GetUserByName(username string) *User {
 func (s PostgresqlStore) DeleteUser(id, username string) bool {
 	return true
 }
+
+func (s PostgresqlStore) GetResponse(url string) []byte {
+	return nil
+}
+
+func (s PostgresqlStore) WriteResponse(url string, response []byte) {
+}

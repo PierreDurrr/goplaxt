@@ -1,5 +1,15 @@
 package trakt
 
+import (
+	"github.com/xanderstrike/goplaxt/lib/store"
+)
+
+type Trakt struct {
+	clientId     string
+	clientSecret string
+	storage      store.Store
+}
+
 // Ids represent the IDs representing a media item accross the metadata providers
 type Ids struct {
 	Trakt  int    `json:"trakt"`

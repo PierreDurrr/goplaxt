@@ -23,10 +23,11 @@ import (
 )
 
 var (
-	version string
-	commit  string
-	date    string
-	storage store.Store
+	version  string
+	commit   string
+	date     string
+	storage  store.Store
+	traktSrv *trakt.Trakt
 )
 
 type AuthorizePage struct {
@@ -57,7 +58,7 @@ func authorize(w http.ResponseWriter, r *http.Request) {
 	username := strings.ToLower(args["username"][0])
 	log.Print(fmt.Sprintf("Handling auth request for %s", username))
 	code := args["code"][0]
-	result, _ := trakt.AuthRequest(SelfRoot(r), username, code, "", "authorization_code")
+	result, _ := traktSrv.AuthRequest(SelfRoot(r), username, code, "", "authorization_code")
 
 	user := store.NewUser(username, result["access_token"].(string), result["refresh_token"].(string), storage)
 
@@ -123,7 +124,7 @@ func api(w http.ResponseWriter, r *http.Request) {
 	tokenAge := time.Since(user.Updated).Hours()
 	if tokenAge > 1440 { // tokens expire after 3 months, so we refresh after 2
 		log.Println("User access token outdated, refreshing...")
-		result, success := trakt.AuthRequest(SelfRoot(r), user.Username, "", user.RefreshToken, "refresh_token")
+		result, success := traktSrv.AuthRequest(SelfRoot(r), user.Username, "", user.RefreshToken, "refresh_token")
 		if success {
 			user.UpdateUser(result["access_token"].(string), result["refresh_token"].(string))
 			log.Println("Refreshed, continuing")
@@ -138,7 +139,7 @@ func api(w http.ResponseWriter, r *http.Request) {
 
 	if username == user.Username {
 		// FIXME - make everything take the pointer
-		trakt.Handle(re, *user)
+		traktSrv.Handle(re, *user)
 	} else {
 		log.Println(fmt.Sprintf("Plex username %s does not equal %s, skipping", strings.ToLower(re.Account.Title), user.Username))
 	}
@@ -200,6 +201,7 @@ func main() {
 		storage = store.NewDiskStore()
 		log.Println("Using disk storage:")
 	}
+	traktSrv = trakt.New(os.Getenv("TRAKT_ID"), os.Getenv("TRAKT_SECRET"), storage)
 
 	router := mux.NewRouter()
 	// Assumption: Behind a proper web server (nginx/traefik, etc) that removes/replaces trusted headers
