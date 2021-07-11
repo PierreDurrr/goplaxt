@@ -13,7 +13,7 @@ const (
 	userPrefix      = "goplaxt:user:"
 	userMapPrefix   = "goplaxt:usermap:"
 	responsePrefix  = "goplaxt:response:"
-	responseTimeout = time.Hour
+	responseTimeout = 3 * time.Hour
 )
 
 // RedisStore is a storage engine that writes to redis
