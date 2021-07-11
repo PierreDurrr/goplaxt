@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/mitchellh/mapstructure"
 	"github.com/xanderstrike/goplaxt/lib/store"
 	"github.com/xanderstrike/plexhooks"
 )
@@ -116,10 +117,9 @@ func (t Trakt) findEpisode(pr plexhooks.PlexResponse) Episode {
 		// so we need to do things a bit differently
 		URL := fmt.Sprintf("https://api.trakt.tv/search/%s/%s?type=episode", traktService, episodeID)
 
-		respBody := t.makeRequest(URL)
-
 		var showInfo []ShowInfo
-		err := json.Unmarshal(respBody, &showInfo)
+		respBody := t.makeRequest(URL)
+		err := mapstructure.Decode(respBody, &showInfo)
 		handleErr(err)
 
 		log.Print(fmt.Sprintf("Tracking %s - S%02dE%02d using %s", showInfo[0].Show.Title, showInfo[0].Episode.Season, showInfo[0].Episode.Number, traktService))
@@ -154,14 +154,14 @@ func (t Trakt) findEpisode(pr plexhooks.PlexResponse) Episode {
 	respBody := t.makeRequest(URL)
 
 	var showInfo []ShowInfo
-	err = json.Unmarshal(respBody, &showInfo)
+	err = mapstructure.Decode(respBody, &showInfo)
 	handleErr(err)
 
 	URL = fmt.Sprintf("https://api.trakt.tv/shows/%d/seasons?extended=episodes", showInfo[0].Show.Ids.Trakt)
 
 	respBody = t.makeRequest(URL)
 	var seasons []Season
-	err = json.Unmarshal(respBody, &seasons)
+	err = mapstructure.Decode(respBody, &seasons)
 	handleErr(err)
 
 	for _, season := range seasons {
@@ -197,7 +197,7 @@ func (t Trakt) findMovie(pr plexhooks.PlexResponse) Movie {
 
 	var results []MovieSearchResult
 
-	err := json.Unmarshal(respBody, &results)
+	err := mapstructure.Decode(respBody, &results)
 	handleErr(err)
 
 	for _, result := range results {
@@ -208,10 +208,13 @@ func (t Trakt) findMovie(pr plexhooks.PlexResponse) Movie {
 	panic("Could not find movie!")
 }
 
-func (t Trakt) makeRequest(url string) []byte {
+func (t Trakt) makeRequest(url string) []map[string]interface{} {
+	var results []map[string]interface{}
+
 	respBody := t.storage.GetResponse(url)
 	if respBody != nil {
-		return respBody
+		_ = json.Unmarshal(respBody, &results)
+		return results
 	}
 
 	client := &http.Client{}
@@ -227,10 +230,16 @@ func (t Trakt) makeRequest(url string) []byte {
 	handleErr(err)
 	defer resp.Body.Close()
 
-	respBody, _ = ioutil.ReadAll(resp.Body)
-	t.storage.WriteResponse(url, respBody)
+	respBody, err = ioutil.ReadAll(resp.Body)
+	handleErr(err)
 
-	return respBody
+	err = json.Unmarshal(respBody, &results)
+	handleErr(err)
+
+	if len(results) > 0 {
+		t.storage.WriteResponse(url, respBody)
+	}
+	return results
 }
 
 func (t Trakt) scrobbleRequest(action string, body []byte, accessToken string) []byte {
