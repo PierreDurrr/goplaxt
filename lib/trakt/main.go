@@ -9,10 +9,16 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/xanderstrike/goplaxt/lib/store"
 	"github.com/xanderstrike/plexhooks"
+)
+
+const (
+	TheTVDBService    = "tvdb"
+	TheMovieDbService = "tmdb"
 )
 
 func New(clientId, clientSecret string, storage store.Store) *Trakt {
@@ -102,6 +108,7 @@ func (t Trakt) findEpisode(pr plexhooks.PlexResponse) Episode {
 
 		log.Println("Finding episode with new Plex TV agent")
 
+		sort.Sort(SortedExternalGuid(pr.Metadata.ExternalGuid))
 		traktService = pr.Metadata.ExternalGuid[0].Id[:4]
 		episodeID = pr.Metadata.ExternalGuid[0].Id[7:]
 
@@ -124,12 +131,12 @@ func (t Trakt) findEpisode(pr plexhooks.PlexResponse) Episode {
 	handleErr(err)
 
 	if strings.HasSuffix(u.Scheme, "tvdb") {
-		traktService = "tvdb"
+		traktService = TheTVDBService
 	} else if strings.HasSuffix(u.Scheme, "themoviedb") {
-		traktService = "tmdb"
+		traktService = TheMovieDbService
 	} else if strings.HasSuffix(u.Scheme, "hama") {
 		if strings.HasPrefix(u.Host, "tvdb-") || strings.HasPrefix(u.Host, "tvdb2-") {
-			traktService = "tvdb"
+			traktService = TheTVDBService
 		}
 	}
 	if traktService == "" {
@@ -176,6 +183,7 @@ func (t Trakt) findMovie(pr plexhooks.PlexResponse) Movie {
 	var URL string
 	var searchById bool
 	if len(pr.Metadata.ExternalGuid) > 0 {
+		sort.Sort(SortedExternalGuid(pr.Metadata.ExternalGuid))
 		traktService := pr.Metadata.ExternalGuid[0].Id[:4]
 		movieId := pr.Metadata.ExternalGuid[0].Id[7:]
 
@@ -244,6 +252,30 @@ func (t Trakt) scrobbleRequest(action string, body []byte, accessToken string) [
 	respBody, _ := ioutil.ReadAll(resp.Body)
 
 	return respBody
+}
+
+func (s SortedExternalGuid) Len() int {
+	return len(s)
+}
+
+func (s SortedExternalGuid) Less(i, j int) bool {
+	urlI, errI := url.Parse(s[i].Id)
+	if errI != nil {
+		return false
+	} else if urlI.Scheme == TheMovieDbService {
+		return true
+	}
+	urlJ, errJ := url.Parse(s[j].Id)
+	if errJ != nil {
+		return true
+	} else if urlJ.Scheme == TheMovieDbService {
+		return false
+	}
+	return urlI.Scheme == TheTVDBService
+}
+
+func (s SortedExternalGuid) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
 }
 
 func getAction(pr plexhooks.PlexResponse) (string, int) {

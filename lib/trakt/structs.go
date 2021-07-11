@@ -2,6 +2,7 @@ package trakt
 
 import (
 	"github.com/xanderstrike/goplaxt/lib/store"
+	"github.com/xanderstrike/plexhooks"
 )
 
 type Trakt struct {
@@ -9,6 +10,8 @@ type Trakt struct {
 	clientSecret string
 	storage      store.Store
 }
+
+type SortedExternalGuid []plexhooks.ExternalGuid
 
 // Ids represent the IDs representing a media item accross the metadata providers
 type Ids struct {
