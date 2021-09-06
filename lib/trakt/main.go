@@ -302,11 +302,7 @@ func (t Trakt) getAction(pr plexhooks.PlexResponse) (string, int) {
 	case "media.resume":
 		action = "start"
 	case "media.stop":
-		if percent < 90 {
-			action = "pause"
-		} else {
-			action = "stop"
-		}
+		action = "pause"
 	case "media.scrobble":
 		t.storage.DeleteProgress(pr.Player.Uuid, pr.Metadata.RatingKey)
 		action = "stop"
