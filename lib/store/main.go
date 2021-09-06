@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"time"
 )
 
 // Store is the interface for All the store types
@@ -15,7 +16,7 @@ type Store interface {
 	GetResponse(url string) []byte
 	WriteResponse(url string, response []byte)
 	GetProgress(playerUuid, ratingKey string) int
-	WriteProgress(playerUuid, ratingKey string, percent int)
+	WriteProgress(playerUuid, ratingKey string, percent int, duration time.Duration)
 	DeleteProgress(playerUuid, ratingKey string)
 	Ping(ctx context.Context) error
 }

@@ -157,8 +157,8 @@ func (s RedisStore) GetProgress(playerUuid, ratingKey string) int {
 	return percent
 }
 
-func (s RedisStore) WriteProgress(playerUuid, ratingKey string, percent int) {
-	s.client.Set(fmt.Sprintf(progressFormat, playerUuid, ratingKey), percent, 0)
+func (s RedisStore) WriteProgress(playerUuid, ratingKey string, percent int, duration time.Duration) {
+	s.client.Set(fmt.Sprintf(progressFormat, playerUuid, ratingKey), percent, duration)
 }
 
 func (s RedisStore) DeleteProgress(playerUuid, ratingKey string) {

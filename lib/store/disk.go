@@ -93,7 +93,7 @@ func (s DiskStore) GetProgress(playerUuid, ratingKey string) int {
 	return 0
 }
 
-func (s DiskStore) WriteProgress(playerUuid, ratingKey string, percent int) {
+func (s DiskStore) WriteProgress(playerUuid, ratingKey string, percent int, duration time.Duration) {
 }
 
 func (s DiskStore) DeleteProgress(playerUuid, ratingKey string) {

@@ -159,7 +159,7 @@ func timeline(w http.ResponseWriter, r *http.Request) {
 		tf, _ := strconv.ParseFloat(playbackTime, 64)
 		df, _ := strconv.ParseFloat(duration, 64)
 		percent := int(math.Round(tf / df * 100.0))
-		traktSrv.SavePlaybackProgress(clientUuid, ratingKey, percent)
+		traktSrv.SavePlaybackProgress(clientUuid, ratingKey, percent, df)
 	}
 
 	_ = json.NewEncoder(w).Encode("success")
