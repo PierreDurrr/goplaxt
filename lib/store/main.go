@@ -14,6 +14,9 @@ type Store interface {
 	DeleteUser(id, username string) bool
 	GetResponse(url string) []byte
 	WriteResponse(url string, response []byte)
+	GetProgress(playerUuid, ratingKey string) int
+	WriteProgress(playerUuid, ratingKey string, percent int)
+	DeleteProgress(playerUuid, ratingKey string)
 	Ping(ctx context.Context) error
 }
 

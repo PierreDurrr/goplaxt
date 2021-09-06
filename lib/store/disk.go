@@ -89,6 +89,16 @@ func (s DiskStore) GetResponse(url string) []byte {
 func (s DiskStore) WriteResponse(url string, response []byte) {
 }
 
+func (s DiskStore) GetProgress(playerUuid, ratingKey string) int {
+	return 0
+}
+
+func (s DiskStore) WriteProgress(playerUuid, ratingKey string, percent int) {
+}
+
+func (s DiskStore) DeleteProgress(playerUuid, ratingKey string) {
+}
+
 func (s DiskStore) writeField(id, field, value string) {
 	err := s.write(fmt.Sprintf("%s.%s", id, field), value)
 	if err != nil {

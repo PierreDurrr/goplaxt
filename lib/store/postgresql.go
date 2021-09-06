@@ -138,3 +138,13 @@ func (s PostgresqlStore) GetResponse(url string) []byte {
 
 func (s PostgresqlStore) WriteResponse(url string, response []byte) {
 }
+
+func (s PostgresqlStore) GetProgress(playerUuid, ratingKey string) int {
+	return 0
+}
+
+func (s PostgresqlStore) WriteProgress(playerUuid, ratingKey string, percent int) {
+}
+
+func (s PostgresqlStore) DeleteProgress(playerUuid, ratingKey string) {
+}

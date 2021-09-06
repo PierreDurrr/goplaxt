@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -13,6 +14,7 @@ const (
 	userPrefix      = "goplaxt:user:"
 	userMapPrefix   = "goplaxt:usermap:"
 	responsePrefix  = "goplaxt:response:"
+	progressFormat  = "goplaxt:progress:%s:%s"
 	responseTimeout = 3 * time.Hour
 )
 
@@ -145,4 +147,20 @@ func (s RedisStore) GetResponse(url string) []byte {
 
 func (s RedisStore) WriteResponse(url string, response []byte) {
 	s.client.Set(responsePrefix+url, response, responseTimeout)
+}
+
+func (s RedisStore) GetProgress(playerUuid, ratingKey string) int {
+	percent, err := s.client.Get(fmt.Sprintf(progressFormat, playerUuid, ratingKey)).Int()
+	if err != nil {
+		return 0
+	}
+	return percent
+}
+
+func (s RedisStore) WriteProgress(playerUuid, ratingKey string, percent int) {
+	s.client.Set(fmt.Sprintf(progressFormat, playerUuid, ratingKey), percent, 0)
+}
+
+func (s RedisStore) DeleteProgress(playerUuid, ratingKey string) {
+	s.client.Del(fmt.Sprintf(progressFormat, playerUuid, ratingKey))
 }

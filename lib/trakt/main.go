@@ -58,9 +58,13 @@ func (t Trakt) AuthRequest(root, username, code, refreshToken, grantType string)
 	return result, true
 }
 
+func (t Trakt) SavePlaybackProgress(playerUuid, ratingKey string, percent int) {
+	t.storage.WriteProgress(playerUuid, ratingKey, percent)
+}
+
 // Handle determine if an item is a show or a movie
 func (t Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
-	event, progress := getAction(pr)
+	event, progress := t.getAction(pr)
 	if event == "" {
 		log.Printf("Unrecognized event: %s", pr.Event)
 		return
@@ -287,20 +291,30 @@ func (s SortedExternalGuid) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
 }
 
-func getAction(pr plexhooks.PlexResponse) (string, int) {
+func (t Trakt) getAction(pr plexhooks.PlexResponse) (string, int) {
+	var action string
+	percent := t.storage.GetProgress(pr.Player.Uuid, pr.Metadata.RatingKey)
 	switch pr.Event {
 	case "media.play":
-		return "start", 0
+		action = "start"
 	case "media.pause":
-		return "stop", 0
+		action = "pause"
 	case "media.resume":
-		return "start", 0
+		action = "start"
 	case "media.stop":
-		return "stop", 0
+		if percent < 90 {
+			action = "pause"
+		} else {
+			action = "stop"
+		}
 	case "media.scrobble":
-		return "stop", 90
+		t.storage.DeleteProgress(pr.Player.Uuid, pr.Metadata.RatingKey)
+		action = "stop"
+		if percent < 90 {
+			percent = 90
+		}
 	}
-	return "", 0
+	return action, percent
 }
 
 func handleErr(err error) {
