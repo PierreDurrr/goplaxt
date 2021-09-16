@@ -60,7 +60,10 @@ func (t Trakt) AuthRequest(root, username, code, refreshToken, grantType string)
 }
 
 func (t Trakt) SavePlaybackProgress(playerUuid, ratingKey string, percent int, duration float64) {
-	t.storage.WriteProgress(playerUuid, ratingKey, percent, time.Duration(int64(duration)) * time.Millisecond)
+	if percent <= 0 {
+		return
+	}
+	t.storage.WriteProgress(playerUuid, ratingKey, percent, time.Duration(int64(duration))*time.Millisecond)
 }
 
 // Handle determine if an item is a show or a movie
