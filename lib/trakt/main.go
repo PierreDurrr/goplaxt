@@ -3,13 +3,16 @@ package trakt
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -111,15 +114,13 @@ var episodeRegex = regexp.MustCompile("(\\d+)/(\\d+)/(\\d+)")
 func (t Trakt) findEpisode(pr plexhooks.PlexResponse) Episode {
 	var traktService string
 	var showID []string
+	var episodeID string
+	var err error
 
-	if len(pr.Metadata.ExternalGuid) > 0 {
-		var episodeID string
-
+	traktService, episodeID, err = parseExternalGuid(pr.Metadata.ExternalGuid)
+	handleErr(err)
+	if traktService != "" {
 		log.Println("Finding episode with new Plex TV agent")
-
-		sort.Sort(SortedExternalGuid(pr.Metadata.ExternalGuid))
-		traktService = pr.Metadata.ExternalGuid[0].Id[:4]
-		episodeID = pr.Metadata.ExternalGuid[0].Id[7:]
 
 		// The new Plex TV agent use episode ID instead of show ID,
 		// so we need to do things a bit differently
@@ -129,6 +130,9 @@ func (t Trakt) findEpisode(pr plexhooks.PlexResponse) Episode {
 		respBody := t.makeRequest(URL)
 		err := mapstructure.Decode(respBody, &showInfo)
 		handleErr(err)
+		if len(showInfo) == 0 {
+			panic("Could not find episode!")
+		}
 
 		log.Print(fmt.Sprintf("Tracking %s - S%02dE%02d using %s", showInfo[0].Show.Title, showInfo[0].Episode.Season, showInfo[0].Episode.Number, traktService))
 
@@ -172,12 +176,15 @@ func (t Trakt) findEpisode(pr plexhooks.PlexResponse) Episode {
 	err = mapstructure.Decode(respBody, &seasons)
 	handleErr(err)
 
+	seasonNumber, _ := strconv.Atoi(showID[2])
+	episodeNumber, _ := strconv.Atoi(showID[3])
 	for _, season := range seasons {
-		if fmt.Sprintf("%d", season.Number) == showID[2] {
-			for _, episode := range season.Episodes {
-				if fmt.Sprintf("%d", episode.Number) == showID[3] {
-					return episode
-				}
+		if season.Number != seasonNumber {
+			continue
+		}
+		for _, episode := range season.Episodes {
+			if episode.Number == episodeNumber {
+				return episode
 			}
 		}
 	}
@@ -190,11 +197,10 @@ func (t Trakt) findMovie(pr plexhooks.PlexResponse) Movie {
 
 	var URL string
 	var searchById bool
-	if len(pr.Metadata.ExternalGuid) > 0 {
-		sort.Sort(SortedExternalGuid(pr.Metadata.ExternalGuid))
-		traktService := pr.Metadata.ExternalGuid[0].Id[:4]
-		movieId := pr.Metadata.ExternalGuid[0].Id[7:]
 
+	traktService, movieId, err := parseExternalGuid(pr.Metadata.ExternalGuid)
+	handleErr(err)
+	if traktService != "" {
 		URL = fmt.Sprintf("https://api.trakt.tv/search/%s/%s?type=movie", traktService, movieId)
 		searchById = true
 	} else {
@@ -205,7 +211,7 @@ func (t Trakt) findMovie(pr plexhooks.PlexResponse) Movie {
 
 	var results []MovieSearchResult
 
-	err := mapstructure.Decode(respBody, &results)
+	err = mapstructure.Decode(respBody, &results)
 	handleErr(err)
 
 	for _, result := range results {
@@ -236,7 +242,9 @@ func (t Trakt) makeRequest(url string) []map[string]interface{} {
 
 	resp, err := client.Do(req)
 	handleErr(err)
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
 
 	respBody, err = ioutil.ReadAll(resp.Body)
 	handleErr(err)
@@ -264,7 +272,9 @@ func (t Trakt) scrobbleRequest(action string, body []byte, accessToken string) [
 	req.Header.Add("trakt-api-key", t.clientId)
 
 	resp, _ := client.Do(req)
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
 
 	respBody, _ := ioutil.ReadAll(resp.Body)
 
@@ -315,6 +325,21 @@ func (t Trakt) getAction(pr plexhooks.PlexResponse) (string, int) {
 		}
 	}
 	return action, percent
+}
+
+func parseExternalGuid(guids []plexhooks.ExternalGuid) (traktSrv, id string, err error) {
+	if len(guids) == 0 {
+		return
+	}
+	sort.Sort(SortedExternalGuid(guids))
+	guid := guids[0].Id
+	if !strings.HasPrefix(guid, TheMovieDbService) && !strings.HasPrefix(guid, TheTVDBService) {
+		err = errors.New(fmt.Sprintf("Unidentified guid: %s", guid))
+		return
+	}
+	traktSrv = guid[:4]
+	id = guid[7:]
+	return
 }
 
 func handleErr(err error) {
