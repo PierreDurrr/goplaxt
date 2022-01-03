@@ -24,7 +24,7 @@ import (
 const (
 	TheTVDBService    = "tvdb"
 	TheMovieDbService = "tmdb"
-	ProgressThreshold = 90
+	ProgressThreshold = 95
 )
 
 func New(clientId, clientSecret string, storage store.Store) *Trakt {
