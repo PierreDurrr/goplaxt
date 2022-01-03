@@ -312,12 +312,11 @@ func (t Trakt) getAction(pr plexhooks.PlexResponse) (action string, percent int)
 		return
 	}
 	switch pr.Event {
-	case "media.play":
+	case "media.play", "media.resume", "playback.started":
 		action = "start"
+		return
 	case "media.pause":
 		action = "pause"
-	case "media.resume":
-		action = "start"
 	case "media.stop":
 		action = "stop"
 	case "media.scrobble":
