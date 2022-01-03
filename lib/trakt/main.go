@@ -67,13 +67,19 @@ func (t Trakt) SavePlaybackProgress(playerUuid, ratingKey string, percent int, d
 	if percent <= 0 {
 		return
 	}
+	if p := t.storage.GetProgress(playerUuid, ratingKey); p < 0 {
+		return
+	}
 	t.storage.WriteProgress(playerUuid, ratingKey, percent, time.Duration(int64(duration))*time.Millisecond)
 }
 
 // Handle determine if an item is a show or a movie
 func (t Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
 	event, progress := t.getAction(pr)
-	if event == "" {
+	if progress < 0 {
+		log.Print("Event ignored")
+		return
+	} else if event == "" {
 		log.Printf("Unrecognized event: %s", pr.Event)
 		return
 	}
