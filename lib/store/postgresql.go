@@ -145,6 +145,3 @@ func (s PostgresqlStore) GetProgress(playerUuid, ratingKey string) int {
 
 func (s PostgresqlStore) WriteProgress(playerUuid, ratingKey string, percent int, duration time.Duration) {
 }
-
-func (s PostgresqlStore) DeleteProgress(playerUuid, ratingKey string) {
-}

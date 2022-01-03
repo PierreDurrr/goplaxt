@@ -96,9 +96,6 @@ func (s DiskStore) GetProgress(playerUuid, ratingKey string) int {
 func (s DiskStore) WriteProgress(playerUuid, ratingKey string, percent int, duration time.Duration) {
 }
 
-func (s DiskStore) DeleteProgress(playerUuid, ratingKey string) {
-}
-
 func (s DiskStore) writeField(id, field, value string) {
 	err := s.write(fmt.Sprintf("%s.%s", id, field), value)
 	if err != nil {

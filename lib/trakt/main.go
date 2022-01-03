@@ -24,6 +24,7 @@ import (
 const (
 	TheTVDBService    = "tvdb"
 	TheMovieDbService = "tmdb"
+	ProgressThreshold = 90
 )
 
 func New(clientId, clientSecret string, storage store.Store) *Trakt {
@@ -305,9 +306,11 @@ func (s SortedExternalGuid) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
 }
 
-func (t Trakt) getAction(pr plexhooks.PlexResponse) (string, int) {
-	var action string
-	percent := t.storage.GetProgress(pr.Player.Uuid, pr.Metadata.RatingKey)
+func (t Trakt) getAction(pr plexhooks.PlexResponse) (action string, percent int) {
+	percent = t.storage.GetProgress(pr.Player.Uuid, pr.Metadata.RatingKey)
+	if percent < 0 {
+		return
+	}
 	switch pr.Event {
 	case "media.play":
 		action = "start"
@@ -316,15 +319,20 @@ func (t Trakt) getAction(pr plexhooks.PlexResponse) (string, int) {
 	case "media.resume":
 		action = "start"
 	case "media.stop":
-		action = "pause"
-	case "media.scrobble":
-		t.storage.DeleteProgress(pr.Player.Uuid, pr.Metadata.RatingKey)
 		action = "stop"
-		if percent < 90 {
-			percent = 90
+	case "media.scrobble":
+		action = "stop"
+		if percent < ProgressThreshold {
+			percent = ProgressThreshold
 		}
 	}
-	return action, percent
+	if percent >= ProgressThreshold {
+		action = "stop"
+		t.storage.WriteProgress(pr.Player.Uuid, pr.Metadata.RatingKey, -1, 30*time.Minute)
+	} else if action == "stop" {
+		action = "pause"
+	}
+	return
 }
 
 func parseExternalGuid(guids []plexhooks.ExternalGuid) (traktSrv, id string, err error) {

@@ -17,7 +17,6 @@ type Store interface {
 	WriteResponse(url string, response []byte)
 	GetProgress(playerUuid, ratingKey string) int
 	WriteProgress(playerUuid, ratingKey string, percent int, duration time.Duration)
-	DeleteProgress(playerUuid, ratingKey string)
 	Ping(ctx context.Context) error
 }
 
