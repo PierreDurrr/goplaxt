@@ -150,6 +150,9 @@ func (s RedisStore) WriteResponse(url string, response []byte) {
 }
 
 func (s RedisStore) GetProgress(playerUuid, ratingKey string) int {
+	if playerUuid == "" || ratingKey == "" {
+		return -1
+	}
 	percent, err := s.client.Get(fmt.Sprintf(progressFormat, playerUuid, ratingKey)).Int()
 	if err != nil {
 		return 0
