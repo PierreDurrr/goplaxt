@@ -242,10 +242,10 @@ func main() {
 		data := AuthorizePage{
 			SelfRoot:   SelfRoot(r),
 			Authorized: false,
-			URL:        "https://plaxt.astandke.com/api?id=generate-your-own-silly",
+			URL:        "https://plaxt.royxiang.me/api?id=generate-your-own-silly",
 			ClientID:   os.Getenv("TRAKT_ID"),
 		}
-		tmpl.Execute(w, data)
+		_ = tmpl.Execute(w, data)
 	}).Methods("GET")
 	listen := os.Getenv("LISTEN")
 	if listen == "" {
