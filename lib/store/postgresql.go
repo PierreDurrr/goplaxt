@@ -59,14 +59,6 @@ func (s PostgresqlStore) Ping(ctx context.Context) error {
 	return conn.PingContext(ctx)
 }
 
-// WriteServer TODO: not implemented
-func (s PostgresqlStore) WriteServer(serverUuid string) {
-}
-
-func (s PostgresqlStore) GetServer(serverUuid string) bool {
-	return false
-}
-
 // WriteUser will write a user object to postgres
 func (s PostgresqlStore) WriteUser(user User) {
 	_, err := s.db.Exec(

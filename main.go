@@ -105,15 +105,8 @@ func api(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	username := strings.ToLower(re.Account.Title)
-	if re.Owner {
-		storage.WriteServer(re.Server.Uuid)
-		if username != user.Username {
-			user = storage.GetUserByName(username)
-		}
-	} else if storage.GetServer(re.Server.Uuid) {
-		log.Println("webhook was set by owner, ignored")
-		w.WriteHeader(http.StatusConflict)
-		return
+	if re.Owner && username != user.Username {
+		user = storage.GetUserByName(username)
 	}
 
 	if user == nil {

@@ -36,7 +36,7 @@ func New(clientId, clientSecret string, storage store.Store) *Trakt {
 }
 
 // AuthRequest authorize the connection with Trakt
-func (t Trakt) AuthRequest(root, username, code, refreshToken, grantType string) (map[string]interface{}, bool) {
+func (t *Trakt) AuthRequest(root, username, code, refreshToken, grantType string) (map[string]interface{}, bool) {
 	values := map[string]string{
 		"code":          code,
 		"refresh_token": refreshToken,
@@ -63,7 +63,7 @@ func (t Trakt) AuthRequest(root, username, code, refreshToken, grantType string)
 	return result, true
 }
 
-func (t Trakt) SavePlaybackProgress(playerUuid, ratingKey string, percent int, duration float64) {
+func (t *Trakt) SavePlaybackProgress(playerUuid, ratingKey string, percent int, duration float64) {
 	if percent <= 0 {
 		return
 	}
@@ -74,7 +74,7 @@ func (t Trakt) SavePlaybackProgress(playerUuid, ratingKey string, percent int, d
 }
 
 // Handle determine if an item is a show or a movie
-func (t Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
+func (t *Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
 	event, progress := t.getAction(pr)
 	if progress < 0 {
 		log.Print("Event ignored")
@@ -92,7 +92,7 @@ func (t Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
 }
 
 // handleShow start the scrobbling for a show
-func (t Trakt) handleShow(pr plexhooks.PlexResponse, event string, progress int, accessToken string) {
+func (t *Trakt) handleShow(pr plexhooks.PlexResponse, event string, progress int, accessToken string) {
 	scrobbleObject := ShowScrobbleBody{
 		Progress: progress,
 		Episode:  t.findEpisode(pr),
@@ -105,7 +105,7 @@ func (t Trakt) handleShow(pr plexhooks.PlexResponse, event string, progress int,
 }
 
 // handleMovie start the scrobbling for a movie
-func (t Trakt) handleMovie(pr plexhooks.PlexResponse, event string, progress int, accessToken string) {
+func (t *Trakt) handleMovie(pr plexhooks.PlexResponse, event string, progress int, accessToken string) {
 	scrobbleObject := MovieScrobbleBody{
 		Progress: progress,
 		Movie:    t.findMovie(pr),
@@ -118,7 +118,7 @@ func (t Trakt) handleMovie(pr plexhooks.PlexResponse, event string, progress int
 
 var episodeRegex = regexp.MustCompile("(\\d+)/(\\d+)/(\\d+)")
 
-func (t Trakt) findEpisode(pr plexhooks.PlexResponse) Episode {
+func (t *Trakt) findEpisode(pr plexhooks.PlexResponse) Episode {
 	var traktService string
 	var showID []string
 	var episodeID string
@@ -199,7 +199,7 @@ func (t Trakt) findEpisode(pr plexhooks.PlexResponse) Episode {
 	panic("Could not find episode!")
 }
 
-func (t Trakt) findMovie(pr plexhooks.PlexResponse) Movie {
+func (t *Trakt) findMovie(pr plexhooks.PlexResponse) Movie {
 	log.Print(fmt.Sprintf("Finding movie for %s (%d)", pr.Metadata.Title, pr.Metadata.Year))
 
 	var URL string
@@ -229,7 +229,7 @@ func (t Trakt) findMovie(pr plexhooks.PlexResponse) Movie {
 	panic("Could not find movie!")
 }
 
-func (t Trakt) makeRequest(url string) []map[string]interface{} {
+func (t *Trakt) makeRequest(url string) []map[string]interface{} {
 	var results []map[string]interface{}
 
 	respBody := t.storage.GetResponse(url)
@@ -265,7 +265,7 @@ func (t Trakt) makeRequest(url string) []map[string]interface{} {
 	return results
 }
 
-func (t Trakt) scrobbleRequest(action string, body []byte, accessToken string) []byte {
+func (t *Trakt) scrobbleRequest(action string, body []byte, accessToken string) []byte {
 	client := &http.Client{}
 
 	URL := fmt.Sprintf("https://api.trakt.tv/scrobble/%s", action)
@@ -312,7 +312,10 @@ func (s SortedExternalGuid) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
 }
 
-func (t Trakt) getAction(pr plexhooks.PlexResponse) (action string, percent int) {
+func (t *Trakt) getAction(pr plexhooks.PlexResponse) (action string, percent int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	percent = t.storage.GetProgress(pr.Player.Uuid, pr.Metadata.RatingKey)
 	if percent < 0 {
 		return
