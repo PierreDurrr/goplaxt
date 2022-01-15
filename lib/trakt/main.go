@@ -14,9 +14,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/mitchellh/mapstructure"
+	"github.com/xanderstrike/goplaxt/lib/internal"
 	"github.com/xanderstrike/goplaxt/lib/store"
 	"github.com/xanderstrike/plexhooks"
 )
@@ -25,6 +25,10 @@ const (
 	TheTVDBService    = "tvdb"
 	TheMovieDbService = "tmdb"
 	ProgressThreshold = 95
+
+	actionStart = "start"
+	actionPause = "pause"
+	actionStop  = "stop"
 )
 
 func New(clientId, clientSecret string, storage store.Store) *Trakt {
@@ -63,62 +67,77 @@ func (t *Trakt) AuthRequest(root, username, code, refreshToken, grantType string
 	return result, true
 }
 
-func (t *Trakt) SavePlaybackProgress(playerUuid, ratingKey string, percent int, duration float64) {
+func (t *Trakt) SavePlaybackProgress(playerUuid, ratingKey, state string, percent int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	if percent <= 0 {
 		return
 	}
-	if p := t.storage.GetProgress(playerUuid, ratingKey); p < 0 {
+	body, accessToken := t.storage.GetScrobbleBody(playerUuid, ratingKey)
+	if body.Episode == nil && body.Movie == nil || body.Progress < 0 {
 		return
 	}
-	t.storage.WriteProgress(playerUuid, ratingKey, percent, time.Duration(int64(duration))*time.Millisecond)
+	body.Progress = percent
+	scrobbleJSON := t.storage.WriteScrobbleBody(playerUuid, ratingKey, body, accessToken)
+	if accessToken != "" {
+		var action string
+		switch state {
+		case "playing":
+			action = actionStart
+		case "paused", "buffering", "stopped":
+			if body.Progress >= ProgressThreshold {
+				action = actionStop
+			} else {
+				action = actionPause
+			}
+		default:
+			return
+		}
+		t.scrobbleRequest(action, scrobbleJSON, accessToken)
+	}
 }
 
 // Handle determine if an item is a show or a movie
 func (t *Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
-	event, progress := t.getAction(pr)
-	if progress < 0 {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	event, scrobbleObject := t.getAction(pr)
+	if scrobbleObject.Progress < 0 {
 		log.Print("Event ignored")
 		return
 	} else if event == "" {
 		log.Printf("Unrecognized event: %s", pr.Event)
 		return
 	}
-	if pr.Metadata.LibrarySectionType == "show" {
-		t.handleShow(pr, event, progress, user.AccessToken)
-	} else if pr.Metadata.LibrarySectionType == "movie" {
-		t.handleMovie(pr, event, progress, user.AccessToken)
+	switch pr.Metadata.LibrarySectionType {
+	case "show":
+		if scrobbleObject.Episode == nil {
+			scrobbleObject.Episode = t.findEpisode(pr)
+		}
+	case "movie":
+		if scrobbleObject.Movie == nil {
+			scrobbleObject.Movie = t.findMovie(pr)
+		}
+	default:
+		return
+	}
+	if scrobbleObject.Progress >= ProgressThreshold {
+		scrobbleJSON, _ := json.Marshal(scrobbleObject)
+		t.scrobbleRequest(event, scrobbleJSON, user.AccessToken)
+		scrobbleObject.Progress = -1
+		t.storage.WriteScrobbleBody(pr.Player.Uuid, pr.Metadata.RatingKey, scrobbleObject, "")
+	} else {
+		scrobbleJSON := t.storage.WriteScrobbleBody(pr.Player.Uuid, pr.Metadata.RatingKey, scrobbleObject, user.AccessToken)
+		t.scrobbleRequest(event, scrobbleJSON, user.AccessToken)
 	}
 	log.Print("Event logged")
 }
 
-// handleShow start the scrobbling for a show
-func (t *Trakt) handleShow(pr plexhooks.PlexResponse, event string, progress int, accessToken string) {
-	scrobbleObject := ShowScrobbleBody{
-		Progress: progress,
-		Episode:  t.findEpisode(pr),
-	}
-
-	scrobbleJSON, err := json.Marshal(scrobbleObject)
-	handleErr(err)
-
-	t.scrobbleRequest(event, scrobbleJSON, accessToken)
-}
-
-// handleMovie start the scrobbling for a movie
-func (t *Trakt) handleMovie(pr plexhooks.PlexResponse, event string, progress int, accessToken string) {
-	scrobbleObject := MovieScrobbleBody{
-		Progress: progress,
-		Movie:    t.findMovie(pr),
-	}
-
-	scrobbleJSON, _ := json.Marshal(scrobbleObject)
-
-	t.scrobbleRequest(event, scrobbleJSON, accessToken)
-}
-
 var episodeRegex = regexp.MustCompile("(\\d+)/(\\d+)/(\\d+)")
 
-func (t *Trakt) findEpisode(pr plexhooks.PlexResponse) Episode {
+func (t *Trakt) findEpisode(pr plexhooks.PlexResponse) *internal.Episode {
 	var traktService string
 	var showID []string
 	var episodeID string
@@ -133,7 +152,7 @@ func (t *Trakt) findEpisode(pr plexhooks.PlexResponse) Episode {
 		// so we need to do things a bit differently
 		URL := fmt.Sprintf("https://api.trakt.tv/search/%s/%s?type=episode", traktService, episodeID)
 
-		var showInfo []ShowInfo
+		var showInfo []internal.ShowInfo
 		respBody := t.makeRequest(URL)
 		err := mapstructure.Decode(respBody, &showInfo)
 		handleErr(err)
@@ -143,7 +162,7 @@ func (t *Trakt) findEpisode(pr plexhooks.PlexResponse) Episode {
 
 		log.Print(fmt.Sprintf("Tracking %s - S%02dE%02d using %s", showInfo[0].Show.Title, showInfo[0].Episode.Season, showInfo[0].Episode.Number, traktService))
 
-		return showInfo[0].Episode
+		return &showInfo[0].Episode
 	}
 
 	u, err := url.Parse(pr.Metadata.Guid)
@@ -172,14 +191,14 @@ func (t *Trakt) findEpisode(pr plexhooks.PlexResponse) Episode {
 
 	respBody := t.makeRequest(URL)
 
-	var showInfo []ShowInfo
+	var showInfo []internal.ShowInfo
 	err = mapstructure.Decode(respBody, &showInfo)
 	handleErr(err)
 
 	URL = fmt.Sprintf("https://api.trakt.tv/shows/%d/seasons?extended=episodes", showInfo[0].Show.Ids.Trakt)
 
 	respBody = t.makeRequest(URL)
-	var seasons []Season
+	var seasons []internal.Season
 	err = mapstructure.Decode(respBody, &seasons)
 	handleErr(err)
 
@@ -191,7 +210,7 @@ func (t *Trakt) findEpisode(pr plexhooks.PlexResponse) Episode {
 		}
 		for _, episode := range season.Episodes {
 			if episode.Number == episodeNumber {
-				return episode
+				return &episode
 			}
 		}
 	}
@@ -199,7 +218,7 @@ func (t *Trakt) findEpisode(pr plexhooks.PlexResponse) Episode {
 	panic("Could not find episode!")
 }
 
-func (t *Trakt) findMovie(pr plexhooks.PlexResponse) Movie {
+func (t *Trakt) findMovie(pr plexhooks.PlexResponse) *internal.Movie {
 	log.Print(fmt.Sprintf("Finding movie for %s (%d)", pr.Metadata.Title, pr.Metadata.Year))
 
 	var URL string
@@ -216,28 +235,20 @@ func (t *Trakt) findMovie(pr plexhooks.PlexResponse) Movie {
 	}
 	respBody := t.makeRequest(URL)
 
-	var results []MovieSearchResult
+	var results []internal.MovieSearchResult
 
 	err = mapstructure.Decode(respBody, &results)
 	handleErr(err)
 
 	for _, result := range results {
 		if result.Movie.Year == pr.Metadata.Year || searchById {
-			return result.Movie
+			return &result.Movie
 		}
 	}
 	panic("Could not find movie!")
 }
 
 func (t *Trakt) makeRequest(url string) []map[string]interface{} {
-	var results []map[string]interface{}
-
-	respBody := t.storage.GetResponse(url)
-	if respBody != nil {
-		_ = json.Unmarshal(respBody, &results)
-		return results
-	}
-
 	client := &http.Client{}
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -253,15 +264,13 @@ func (t *Trakt) makeRequest(url string) []map[string]interface{} {
 		_ = Body.Close()
 	}(resp.Body)
 
-	respBody, err = ioutil.ReadAll(resp.Body)
+	respBody, err := ioutil.ReadAll(resp.Body)
 	handleErr(err)
 
+	var results []map[string]interface{}
 	err = json.Unmarshal(respBody, &results)
 	handleErr(err)
 
-	if len(results) > 0 {
-		t.storage.WriteResponse(url, respBody)
-	}
 	return results
 }
 
@@ -312,33 +321,26 @@ func (s SortedExternalGuid) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
 }
 
-func (t *Trakt) getAction(pr plexhooks.PlexResponse) (action string, percent int) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	percent = t.storage.GetProgress(pr.Player.Uuid, pr.Metadata.RatingKey)
-	if percent < 0 {
+func (t *Trakt) getAction(pr plexhooks.PlexResponse) (action string, body internal.ScrobbleBody) {
+	body, _ = t.storage.GetScrobbleBody(pr.Player.Uuid, pr.Metadata.RatingKey)
+	if body.Progress < 0 {
 		return
 	}
 	switch pr.Event {
 	case "media.play", "media.resume", "playback.started":
-		action = "start"
+		action = actionStart
 		return
-	case "media.pause":
-		action = "pause"
-	case "media.stop":
-		action = "stop"
-	case "media.scrobble":
-		action = "stop"
-		if percent < ProgressThreshold {
-			percent = ProgressThreshold
+	case "media.pause", "media.stop":
+		if body.Progress >= ProgressThreshold {
+			action = actionStop
+		} else {
+			action = actionPause
 		}
-	}
-	if percent >= ProgressThreshold {
-		action = "stop"
-		t.storage.WriteProgress(pr.Player.Uuid, pr.Metadata.RatingKey, -1, 30*time.Minute)
-	} else if action == "stop" {
-		action = "pause"
+	case "media.scrobble":
+		action = actionStop
+		if body.Progress < ProgressThreshold {
+			body.Progress = ProgressThreshold
+		}
 	}
 	return
 }

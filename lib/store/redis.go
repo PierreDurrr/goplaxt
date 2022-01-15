@@ -2,20 +2,21 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/go-redis/redis"
+	"github.com/xanderstrike/goplaxt/lib/internal"
 )
 
 const (
-	serverPrefix    = "goplaxt:server:"
 	userPrefix      = "goplaxt:user:"
 	userMapPrefix   = "goplaxt:usermap:"
-	responsePrefix  = "goplaxt:response:"
-	progressFormat  = "goplaxt:progress:%s:%s"
-	responseTimeout = 3 * time.Hour
+	scrobbleFormat  = "goplaxt:scrobble:%s:%s"
+	tokenFormat     = "goplaxt:token:%s:%s"
+	scrobbleTimeout = 3 * time.Hour
 )
 
 // RedisStore is a storage engine that writes to redis
@@ -127,29 +128,29 @@ func (s RedisStore) DeleteUser(id, username string) bool {
 	return err == nil
 }
 
-func (s RedisStore) GetResponse(url string) []byte {
-	response, err := s.client.Get(responsePrefix + url).Bytes()
-	if err != nil {
-		return nil
-	}
-	return response
-}
-
-func (s RedisStore) WriteResponse(url string, response []byte) {
-	s.client.Set(responsePrefix+url, response, responseTimeout)
-}
-
-func (s RedisStore) GetProgress(playerUuid, ratingKey string) int {
+func (s RedisStore) GetScrobbleBody(playerUuid, ratingKey string) (body internal.ScrobbleBody, accessToken string) {
 	if playerUuid == "" || ratingKey == "" {
-		return -1
+		body.Progress = -1
+		return
 	}
-	percent, err := s.client.Get(fmt.Sprintf(progressFormat, playerUuid, ratingKey)).Int()
+	pipeline := s.client.Pipeline()
+	body.Progress = 0
+	accessToken = pipeline.Get(fmt.Sprintf(tokenFormat, playerUuid, ratingKey)).String()
+	cache, err := pipeline.Get(fmt.Sprintf(scrobbleFormat, playerUuid, ratingKey)).Bytes()
 	if err != nil {
-		return 0
+		return
 	}
-	return percent
+	err = json.Unmarshal(cache, &body)
+	if err != nil {
+		return
+	}
+	return
 }
 
-func (s RedisStore) WriteProgress(playerUuid, ratingKey string, percent int, duration time.Duration) {
-	s.client.Set(fmt.Sprintf(progressFormat, playerUuid, ratingKey), percent, duration)
+func (s RedisStore) WriteScrobbleBody(playerUuid, ratingKey string, body internal.ScrobbleBody, accessToken string) []byte {
+	b, _ := json.Marshal(body)
+	pipeline := s.client.Pipeline()
+	pipeline.Set(fmt.Sprintf(tokenFormat, playerUuid, ratingKey), accessToken, scrobbleTimeout)
+	pipeline.Set(fmt.Sprintf(scrobbleFormat, playerUuid, ratingKey), b, scrobbleTimeout)
+	return b
 }

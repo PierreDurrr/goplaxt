@@ -147,12 +147,13 @@ func timeline(w http.ResponseWriter, r *http.Request) {
 	ratingKey := r.URL.Query().Get("ratingKey")
 	playbackTime := r.URL.Query().Get("time")
 	duration := r.URL.Query().Get("duration")
+	state := r.URL.Query().Get("state")
 
 	if clientUuid != "" && ratingKey != "" && playbackTime != "" && duration != "" {
 		tf, _ := strconv.ParseFloat(playbackTime, 64)
 		df, _ := strconv.ParseFloat(duration, 64)
 		percent := int(math.Round(tf / df * 100.0))
-		traktSrv.SavePlaybackProgress(clientUuid, ratingKey, percent, df)
+		traktSrv.SavePlaybackProgress(clientUuid, ratingKey, state, percent)
 	}
 
 	_ = json.NewEncoder(w).Encode("success")

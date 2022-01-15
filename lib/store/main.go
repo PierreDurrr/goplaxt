@@ -2,7 +2,8 @@ package store
 
 import (
 	"context"
-	"time"
+
+	"github.com/xanderstrike/goplaxt/lib/internal"
 )
 
 // Store is the interface for All the store types
@@ -11,10 +12,8 @@ type Store interface {
 	GetUser(id string) *User
 	GetUserByName(username string) *User
 	DeleteUser(id, username string) bool
-	GetResponse(url string) []byte
-	WriteResponse(url string, response []byte)
-	GetProgress(playerUuid, ratingKey string) int
-	WriteProgress(playerUuid, ratingKey string, percent int, duration time.Duration)
+	GetScrobbleBody(playerUuid, ratingKey string) (body internal.ScrobbleBody, accessToken string)
+	WriteScrobbleBody(playerUuid, ratingKey string, body internal.ScrobbleBody, accessToken string) []byte
 	Ping(ctx context.Context) error
 }
 

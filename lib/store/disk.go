@@ -2,11 +2,13 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/peterbourgon/diskv"
+	"github.com/xanderstrike/goplaxt/lib/internal"
 )
 
 // DiskStore is a storage engine that writes to the disk
@@ -74,18 +76,18 @@ func (s DiskStore) DeleteUser(id, username string) bool {
 	return true
 }
 
-func (s DiskStore) GetResponse(url string) []byte {
-	return nil
+func (s DiskStore) GetScrobbleBody(playerUuid, ratingKey string) (body internal.ScrobbleBody, accessToken string) {
+	if playerUuid == "" || ratingKey == "" {
+		body.Progress = -1
+		return
+	}
+	body.Progress = 0
+	return
 }
 
-func (s DiskStore) WriteResponse(url string, response []byte) {
-}
-
-func (s DiskStore) GetProgress(playerUuid, ratingKey string) int {
-	return 0
-}
-
-func (s DiskStore) WriteProgress(playerUuid, ratingKey string, percent int, duration time.Duration) {
+func (s DiskStore) WriteScrobbleBody(playerUuid, ratingKey string, body internal.ScrobbleBody, accessToken string) []byte {
+	b, _ := json.Marshal(body)
+	return b
 }
 
 func (s DiskStore) writeField(id, field, value string) {

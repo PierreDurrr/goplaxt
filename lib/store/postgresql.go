@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -10,6 +11,7 @@ import (
 
 	// Postgres db library loading
 	_ "github.com/lib/pq"
+	"github.com/xanderstrike/goplaxt/lib/internal"
 )
 
 // PostgresqlStore is a storage engine that writes to postgres
@@ -124,16 +126,16 @@ func (s PostgresqlStore) DeleteUser(id, username string) bool {
 	return true
 }
 
-func (s PostgresqlStore) GetResponse(url string) []byte {
-	return nil
+func (s PostgresqlStore) GetScrobbleBody(playerUuid, ratingKey string) (body internal.ScrobbleBody, accessToken string) {
+	if playerUuid == "" || ratingKey == "" {
+		body.Progress = -1
+		return
+	}
+	body.Progress = 0
+	return
 }
 
-func (s PostgresqlStore) WriteResponse(url string, response []byte) {
-}
-
-func (s PostgresqlStore) GetProgress(playerUuid, ratingKey string) int {
-	return 0
-}
-
-func (s PostgresqlStore) WriteProgress(playerUuid, ratingKey string, percent int, duration time.Duration) {
+func (s PostgresqlStore) WriteScrobbleBody(playerUuid, ratingKey string, body internal.ScrobbleBody, accessToken string) []byte {
+	b, _ := json.Marshal(body)
+	return b
 }
