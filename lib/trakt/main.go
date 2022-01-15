@@ -68,9 +68,6 @@ func (t *Trakt) AuthRequest(root, username, code, refreshToken, grantType string
 }
 
 func (t *Trakt) SavePlaybackProgress(playerUuid, ratingKey, state string, percent int) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
 	if percent <= 0 {
 		return
 	}
@@ -100,9 +97,6 @@ func (t *Trakt) SavePlaybackProgress(playerUuid, ratingKey, state string, percen
 
 // Handle determine if an item is a show or a movie
 func (t *Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
 	event, scrobbleObject := t.getAction(pr)
 	if scrobbleObject.Progress < 0 {
 		log.Print("Event ignored")
