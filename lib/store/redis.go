@@ -140,10 +140,11 @@ func (s RedisStore) GetScrobbleBody(playerUuid, ratingKey string) (body internal
 	if err != nil {
 		return
 	}
-	err = json.Unmarshal(cache, &body)
+	_, err = pipeline.Exec()
 	if err != nil {
 		return
 	}
+	_ = json.Unmarshal(cache, &body)
 	return
 }
 
@@ -152,5 +153,6 @@ func (s RedisStore) WriteScrobbleBody(playerUuid, ratingKey string, body interna
 	pipeline := s.client.Pipeline()
 	pipeline.Set(fmt.Sprintf(tokenFormat, playerUuid, ratingKey), accessToken, scrobbleTimeout)
 	pipeline.Set(fmt.Sprintf(scrobbleFormat, playerUuid, ratingKey), b, scrobbleTimeout)
+	_, _ = pipeline.Exec()
 	return b
 }
