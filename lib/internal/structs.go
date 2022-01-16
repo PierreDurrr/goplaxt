@@ -13,7 +13,7 @@ type Ids struct {
 type Show struct {
 	Title *string `json:"title,omitempty"`
 	Year  *int    `json:"year,omitempty"`
-	Ids   Ids
+	Ids   Ids     `json:"ids"`
 }
 
 // ShowInfo represent a show
