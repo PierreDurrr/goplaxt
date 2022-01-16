@@ -24,8 +24,8 @@ type ShowInfo struct {
 
 // Episode represent an episode
 type Episode struct {
-	Season int     `json:"season"`
-	Number int     `json:"number"`
+	Season *int    `json:"season,omitempty"`
+	Number *int    `json:"number,omitempty"`
 	Title  *string `json:"title,omitempty"`
 	Ids    *Ids    `json:"ids,omitempty"`
 }

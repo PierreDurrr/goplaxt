@@ -266,8 +266,8 @@ func (t *Trakt) findEpisode(pr plexhooks.PlexResponse) *internal.ScrobbleBody {
 	season, _ := strconv.Atoi(showID[2])
 	number, _ := strconv.Atoi(showID[3])
 	episode := internal.Episode{
-		Season: season,
-		Number: number,
+		Season: &season,
+		Number: &number,
 	}
 	return &internal.ScrobbleBody{
 		Show:    &show,
