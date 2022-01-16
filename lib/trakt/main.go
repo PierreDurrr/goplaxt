@@ -72,27 +72,24 @@ func (t *Trakt) SavePlaybackProgress(playerUuid, ratingKey, state string, percen
 		return
 	}
 	body, accessToken := t.storage.GetScrobbleBody(playerUuid, ratingKey)
-	if body.Episode == nil && body.Movie == nil || body.Progress < 0 {
+	if (body.Episode == nil && body.Movie == nil) || accessToken == "" {
 		return
 	}
 	body.Progress = percent
 	scrobbleJSON := t.storage.WriteScrobbleBody(playerUuid, ratingKey, body, accessToken)
-	if accessToken != "" {
-		var action string
-		switch state {
-		case "playing":
-			action = actionStart
-		case "paused", "buffering", "stopped":
-			if body.Progress >= ProgressThreshold {
-				action = actionStop
-			} else {
-				action = actionPause
-			}
-		default:
-			return
+
+	var action string
+	switch state {
+	case "paused", "stopped":
+		if body.Progress >= ProgressThreshold {
+			action = actionStop
+		} else {
+			action = actionPause
 		}
-		t.scrobbleRequest(action, scrobbleJSON, accessToken)
+	default:
+		return
 	}
+	t.scrobbleRequest(action, scrobbleJSON, accessToken)
 }
 
 // Handle determine if an item is a show or a movie
@@ -117,15 +114,12 @@ func (t *Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
 	default:
 		return
 	}
-	if scrobbleObject.Progress >= ProgressThreshold {
-		scrobbleJSON, _ := json.Marshal(scrobbleObject)
-		t.scrobbleRequest(event, scrobbleJSON, user.AccessToken)
-		scrobbleObject.Progress = -1
-		t.storage.WriteScrobbleBody(pr.Player.Uuid, pr.Metadata.RatingKey, scrobbleObject, "")
-	} else {
-		scrobbleJSON := t.storage.WriteScrobbleBody(pr.Player.Uuid, pr.Metadata.RatingKey, scrobbleObject, user.AccessToken)
-		t.scrobbleRequest(event, scrobbleJSON, user.AccessToken)
+	var tokenToBeCached string
+	if scrobbleObject.Progress < ProgressThreshold {
+		tokenToBeCached = user.AccessToken
 	}
+	scrobbleJSON := t.storage.WriteScrobbleBody(pr.Player.Uuid, pr.Metadata.RatingKey, scrobbleObject, tokenToBeCached)
+	t.scrobbleRequest(event, scrobbleJSON, user.AccessToken)
 	log.Print("Event logged")
 }
 
