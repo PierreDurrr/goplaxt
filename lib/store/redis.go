@@ -15,7 +15,6 @@ const (
 	userPrefix      = "goplaxt:user:"
 	userMapPrefix   = "goplaxt:usermap:"
 	scrobbleFormat  = "goplaxt:scrobble:%s:%s"
-	tokenFormat     = "goplaxt:token:%s:%s"
 	scrobbleTimeout = 3 * time.Hour
 )
 
@@ -128,31 +127,21 @@ func (s RedisStore) DeleteUser(id, username string) bool {
 	return err == nil
 }
 
-func (s RedisStore) GetScrobbleBody(playerUuid, ratingKey string) (body internal.ScrobbleBody, accessToken string) {
-	if playerUuid == "" || ratingKey == "" {
-		body.Progress = -1
-		return
+func (s RedisStore) GetScrobbleBody(playerUuid, ratingKey string) (item internal.CacheItem) {
+	item = internal.CacheItem{
+		Body: internal.ScrobbleBody{
+			Progress: 0,
+		},
 	}
-	pipeline := s.client.Pipeline()
-	body.Progress = 0
-	accessToken = pipeline.Get(fmt.Sprintf(tokenFormat, playerUuid, ratingKey)).String()
-	cache, err := pipeline.Get(fmt.Sprintf(scrobbleFormat, playerUuid, ratingKey)).Bytes()
+	cache, err := s.client.Get(fmt.Sprintf(scrobbleFormat, playerUuid, ratingKey)).Bytes()
 	if err != nil {
 		return
 	}
-	_, err = pipeline.Exec()
-	if err != nil {
-		return
-	}
-	_ = json.Unmarshal(cache, &body)
+	_ = json.Unmarshal(cache, &item)
 	return
 }
 
-func (s RedisStore) WriteScrobbleBody(playerUuid, ratingKey string, body internal.ScrobbleBody, accessToken string) []byte {
-	b, _ := json.Marshal(body)
-	pipeline := s.client.Pipeline()
-	pipeline.Set(fmt.Sprintf(tokenFormat, playerUuid, ratingKey), accessToken, scrobbleTimeout)
-	pipeline.Set(fmt.Sprintf(scrobbleFormat, playerUuid, ratingKey), b, scrobbleTimeout)
-	_, _ = pipeline.Exec()
-	return b
+func (s RedisStore) WriteScrobbleBody(playerUuid, ratingKey string, item internal.CacheItem) {
+	b, _ := json.Marshal(item)
+	s.client.Set(fmt.Sprintf(scrobbleFormat, playerUuid, ratingKey), b, scrobbleTimeout)
 }

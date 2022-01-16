@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -76,18 +75,15 @@ func (s DiskStore) DeleteUser(id, username string) bool {
 	return true
 }
 
-func (s DiskStore) GetScrobbleBody(playerUuid, ratingKey string) (body internal.ScrobbleBody, accessToken string) {
-	if playerUuid == "" || ratingKey == "" {
-		body.Progress = -1
-		return
+func (s DiskStore) GetScrobbleBody(playerUuid, ratingKey string) internal.CacheItem {
+	return internal.CacheItem{
+		Body: internal.ScrobbleBody{
+			Progress: 0,
+		},
 	}
-	body.Progress = 0
-	return
 }
 
-func (s DiskStore) WriteScrobbleBody(playerUuid, ratingKey string, body internal.ScrobbleBody, accessToken string) []byte {
-	b, _ := json.Marshal(body)
-	return b
+func (s DiskStore) WriteScrobbleBody(playerUuid, ratingKey string, item internal.CacheItem) {
 }
 
 func (s DiskStore) writeField(id, field, value string) {

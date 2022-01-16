@@ -3,7 +3,6 @@ package trakt
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -11,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -24,6 +22,7 @@ import (
 const (
 	TheTVDBService    = "tvdb"
 	TheMovieDbService = "tmdb"
+	IMDBService       = "imdb"
 	ProgressThreshold = 95
 
 	actionStart = "start"
@@ -71,169 +70,231 @@ func (t *Trakt) SavePlaybackProgress(playerUuid, ratingKey, state string, percen
 	if percent <= 0 {
 		return
 	}
-	body, accessToken := t.storage.GetScrobbleBody(playerUuid, ratingKey)
-	if (body.Episode == nil && body.Movie == nil) || accessToken == "" {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	cache := t.storage.GetScrobbleBody(playerUuid, ratingKey)
+	if (cache.Body.Episode == nil && cache.Body.Movie == nil) ||
+		(cache.Body.Progress >= ProgressThreshold && cache.LastAction == actionStop) {
 		return
 	}
-	body.Progress = percent
-	scrobbleJSON := t.storage.WriteScrobbleBody(playerUuid, ratingKey, body, accessToken)
 
 	var action string
 	switch state {
-	case "paused", "stopped":
-		if body.Progress >= ProgressThreshold {
+	case "playing":
+		action = actionStart
+	case "paused", "stopped", "buffering":
+		if cache.Body.Progress >= ProgressThreshold {
 			action = actionStop
 		} else {
 			action = actionPause
 		}
-	default:
+	}
+	if action == "" || (action == cache.LastAction && cache.Body.Progress == percent) {
 		return
 	}
-	t.scrobbleRequest(action, scrobbleJSON, accessToken)
+
+	cache.LastAction = action
+	cache.Body.Progress = percent
+	t.storage.WriteScrobbleBody(playerUuid, ratingKey, cache)
+
+	JSON, _ := json.Marshal(cache.Body)
+	go t.scrobbleRequest(action, JSON, cache.AccessToken)
 }
 
 // Handle determine if an item is a show or a movie
 func (t *Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
-	event, scrobbleObject := t.getAction(pr)
-	if scrobbleObject.Progress < 0 {
+	if pr.Player.Uuid == "" || pr.Metadata.RatingKey == "" {
 		log.Print("Event ignored")
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	event, cache := t.getAction(pr)
+	if cache.Body.Progress >= ProgressThreshold && cache.LastAction == actionStop && cache.AccessToken == user.AccessToken {
+		log.Print("Event already scrobbled")
 		return
 	} else if event == "" {
 		log.Printf("Unrecognized event: %s", pr.Event)
 		return
 	}
+
+	var body *internal.ScrobbleBody
 	switch pr.Metadata.LibrarySectionType {
 	case "show":
-		if scrobbleObject.Episode == nil {
-			scrobbleObject.Episode = t.findEpisode(pr)
+		body = t.handleShow(pr)
+		if body == nil {
+			log.Print("Cannot find episode")
+			return
 		}
 	case "movie":
-		if scrobbleObject.Movie == nil {
-			scrobbleObject.Movie = t.findMovie(pr)
+		body = t.handleMovie(pr)
+		if body == nil {
+			log.Print("Cannot find movie")
+			return
 		}
 	default:
+		log.Print("Event ignored")
 		return
 	}
-	var tokenToBeCached string
-	if scrobbleObject.Progress < ProgressThreshold {
-		tokenToBeCached = user.AccessToken
-	}
-	scrobbleJSON := t.storage.WriteScrobbleBody(pr.Player.Uuid, pr.Metadata.RatingKey, scrobbleObject, tokenToBeCached)
-	t.scrobbleRequest(event, scrobbleJSON, user.AccessToken)
+
+	body.Progress = cache.Body.Progress
+	cache.Body = *body
+	cache.LastAction = event
+	cache.AccessToken = user.AccessToken
+	t.storage.WriteScrobbleBody(pr.Player.Uuid, pr.Metadata.RatingKey, cache)
+
+	JSON, _ := json.Marshal(body)
+	go t.scrobbleRequest(event, JSON, user.AccessToken)
+
 	log.Print("Event logged")
 }
 
-var episodeRegex = regexp.MustCompile("(\\d+)/(\\d+)/(\\d+)")
-
-func (t *Trakt) findEpisode(pr plexhooks.PlexResponse) *internal.Episode {
-	var traktService string
-	var showID []string
-	var episodeID string
-	var err error
-
-	traktService, episodeID, err = parseExternalGuid(pr.Metadata.ExternalGuid)
-	handleErr(err)
-	if traktService != "" {
-		log.Println("Finding episode with new Plex TV agent")
-
-		// The new Plex TV agent use episode ID instead of show ID,
-		// so we need to do things a bit differently
-		URL := fmt.Sprintf("https://api.trakt.tv/search/%s/%s?type=episode", traktService, episodeID)
-
-		var showInfo []internal.ShowInfo
-		respBody := t.makeRequest(URL)
-		err := mapstructure.Decode(respBody, &showInfo)
-		handleErr(err)
-		if len(showInfo) == 0 {
-			panic("Could not find episode!")
+func (t *Trakt) handleShow(pr plexhooks.PlexResponse) *internal.ScrobbleBody {
+	if len(pr.Metadata.ExternalGuid) > 0 {
+		isValid := false
+		ids := internal.Ids{}
+		for _, guid := range pr.Metadata.ExternalGuid {
+			if len(guid.Id) < 8 {
+				continue
+			}
+			switch guid.Id[:4] {
+			case TheMovieDbService:
+				id, err := strconv.Atoi(guid.Id[7:])
+				if err != nil {
+					continue
+				}
+				ids.Tmdb = &id
+				isValid = true
+			case TheTVDBService:
+				id, err := strconv.Atoi(guid.Id[7:])
+				if err != nil {
+					continue
+				}
+				ids.Tvdb = &id
+				isValid = true
+			case IMDBService:
+				id := guid.Id[7:]
+				ids.Imdb = &id
+				isValid = true
+			}
 		}
-
-		log.Print(fmt.Sprintf("Tracking %s - S%02dE%02d using %s", showInfo[0].Show.Title, showInfo[0].Episode.Season, showInfo[0].Episode.Number, traktService))
-
-		return &showInfo[0].Episode
-	}
-
-	u, err := url.Parse(pr.Metadata.Guid)
-	handleErr(err)
-
-	if strings.HasSuffix(u.Scheme, "tvdb") {
-		traktService = TheTVDBService
-	} else if strings.HasSuffix(u.Scheme, "themoviedb") {
-		traktService = TheMovieDbService
-	} else if strings.HasSuffix(u.Scheme, "hama") {
-		if strings.HasPrefix(u.Host, "tvdb-") || strings.HasPrefix(u.Host, "tvdb2-") {
-			traktService = TheTVDBService
-		}
-	}
-	if traktService == "" {
-		panic(fmt.Sprintf("Unidentified guid: %s", pr.Metadata.Guid))
-	}
-	showID = episodeRegex.FindStringSubmatch(pr.Metadata.Guid)
-	if showID == nil {
-		panic(fmt.Sprintf("Unmatched guid: %s", pr.Metadata.Guid))
-	}
-
-	URL := fmt.Sprintf("https://api.trakt.tv/search/%s/%s?type=show", traktService, showID[1])
-
-	log.Print(fmt.Sprintf("Finding show for %s %s %s using %s", showID[1], showID[2], showID[3], traktService))
-
-	respBody := t.makeRequest(URL)
-
-	var showInfo []internal.ShowInfo
-	err = mapstructure.Decode(respBody, &showInfo)
-	handleErr(err)
-
-	URL = fmt.Sprintf("https://api.trakt.tv/shows/%d/seasons?extended=episodes", showInfo[0].Show.Ids.Trakt)
-
-	respBody = t.makeRequest(URL)
-	var seasons []internal.Season
-	err = mapstructure.Decode(respBody, &seasons)
-	handleErr(err)
-
-	seasonNumber, _ := strconv.Atoi(showID[2])
-	episodeNumber, _ := strconv.Atoi(showID[3])
-	for _, season := range seasons {
-		if season.Number != seasonNumber {
-			continue
-		}
-		for _, episode := range season.Episodes {
-			if episode.Number == episodeNumber {
-				return &episode
+		if isValid {
+			return &internal.ScrobbleBody{
+				Episode: &internal.Episode{
+					Ids: &ids,
+				},
 			}
 		}
 	}
-
-	panic("Could not find episode!")
+	return t.findEpisode(pr)
 }
 
-func (t *Trakt) findMovie(pr plexhooks.PlexResponse) *internal.Movie {
+func (t *Trakt) handleMovie(pr plexhooks.PlexResponse) *internal.ScrobbleBody {
+	if len(pr.Metadata.ExternalGuid) > 0 {
+		isValid := false
+		movie := internal.Movie{}
+		for _, guid := range pr.Metadata.ExternalGuid {
+			if len(guid.Id) < 8 {
+				continue
+			}
+			switch guid.Id[:4] {
+			case TheMovieDbService:
+				id, err := strconv.Atoi(guid.Id[7:])
+				if err != nil {
+					continue
+				}
+				movie.Ids.Tmdb = &id
+				isValid = true
+			case TheTVDBService:
+				id, err := strconv.Atoi(guid.Id[7:])
+				if err != nil {
+					continue
+				}
+				movie.Ids.Tvdb = &id
+				isValid = true
+			case IMDBService:
+				id := guid.Id[7:]
+				movie.Ids.Imdb = &id
+				isValid = true
+			}
+		}
+		if isValid {
+			return &internal.ScrobbleBody{
+				Movie: &movie,
+			}
+		}
+	}
+	return t.findMovie(pr)
+}
+
+var episodeRegex = regexp.MustCompile(`([0-9]+)/([0-9]+)/([0-9]+)`)
+
+func (t *Trakt) findEpisode(pr plexhooks.PlexResponse) *internal.ScrobbleBody {
+	u, err := url.Parse(pr.Metadata.Guid)
+	if err != nil {
+		log.Printf("Invalid guid: %s", pr.Metadata.Guid)
+		return nil
+	}
+	var srv string
+	if strings.HasSuffix(u.Scheme, "tvdb") {
+		srv = TheTVDBService
+	} else if strings.HasSuffix(u.Scheme, "themoviedb") {
+		srv = TheMovieDbService
+	} else if strings.HasSuffix(u.Scheme, "hama") {
+		if strings.HasPrefix(u.Host, "tvdb-") || strings.HasPrefix(u.Host, "tvdb2-") {
+			srv = TheTVDBService
+		}
+	}
+	if srv == "" {
+		log.Printf(fmt.Sprintf("Unidentified guid: %s", pr.Metadata.Guid))
+		return nil
+	}
+	showID := episodeRegex.FindStringSubmatch(pr.Metadata.Guid)
+	if showID == nil {
+		log.Printf(fmt.Sprintf("Unmatched guid: %s", pr.Metadata.Guid))
+		return nil
+	}
+	show := internal.Show{}
+	id, _ := strconv.Atoi(showID[1])
+	if srv == TheTVDBService {
+		show.Ids.Tvdb = &id
+	} else {
+		show.Ids.Tmdb = &id
+	}
+	season, _ := strconv.Atoi(showID[2])
+	number, _ := strconv.Atoi(showID[3])
+	episode := internal.Episode{
+		Season: season,
+		Number: number,
+	}
+	return &internal.ScrobbleBody{
+		Show:    &show,
+		Episode: &episode,
+	}
+}
+
+func (t *Trakt) findMovie(pr plexhooks.PlexResponse) *internal.ScrobbleBody {
 	log.Print(fmt.Sprintf("Finding movie for %s (%d)", pr.Metadata.Title, pr.Metadata.Year))
 
-	var URL string
-	var searchById bool
-
-	traktService, movieId, err := parseExternalGuid(pr.Metadata.ExternalGuid)
-	handleErr(err)
-	if traktService != "" {
-		URL = fmt.Sprintf("https://api.trakt.tv/search/%s/%s?type=movie", traktService, movieId)
-		searchById = true
-	} else {
-		URL = fmt.Sprintf("https://api.trakt.tv/search/movie?query=%s&fields=title", url.PathEscape(pr.Metadata.Title))
-		searchById = false
-	}
+	URL := fmt.Sprintf("https://api.trakt.tv/search/movie?query=%s&fields=title", url.PathEscape(pr.Metadata.Title))
 	respBody := t.makeRequest(URL)
 
 	var results []internal.MovieSearchResult
-
-	err = mapstructure.Decode(respBody, &results)
-	handleErr(err)
-
+	err := mapstructure.Decode(respBody, &results)
+	if err != nil {
+		log.Printf("Cannot decode response: %s", respBody)
+		return nil
+	}
 	for _, result := range results {
-		if result.Movie.Year == pr.Metadata.Year || searchById {
-			return &result.Movie
+		if *result.Movie.Year == pr.Metadata.Year {
+			return &internal.ScrobbleBody{
+				Movie: &result.Movie,
+			}
 		}
 	}
-	panic("Could not find movie!")
+	return nil
 }
 
 func (t *Trakt) makeRequest(url string) []map[string]interface{} {
@@ -285,66 +346,24 @@ func (t *Trakt) scrobbleRequest(action string, body []byte, accessToken string) 
 	return respBody
 }
 
-func (s SortedExternalGuid) Len() int {
-	return len(s)
-}
-
-func (s SortedExternalGuid) Less(i, j int) bool {
-	urlI, errI := url.Parse(s[i].Id)
-	if errI != nil {
-		return false
-	} else if urlI.Scheme == TheMovieDbService {
-		return true
-	}
-	urlJ, errJ := url.Parse(s[j].Id)
-	if errJ != nil {
-		return true
-	} else if urlJ.Scheme == TheMovieDbService {
-		return false
-	}
-	return urlI.Scheme == TheTVDBService
-}
-
-func (s SortedExternalGuid) Swap(i, j int) {
-	s[i], s[j] = s[j], s[i]
-}
-
-func (t *Trakt) getAction(pr plexhooks.PlexResponse) (action string, body internal.ScrobbleBody) {
-	body, _ = t.storage.GetScrobbleBody(pr.Player.Uuid, pr.Metadata.RatingKey)
-	if body.Progress < 0 {
-		return
-	}
+func (t *Trakt) getAction(pr plexhooks.PlexResponse) (action string, item internal.CacheItem) {
+	item = t.storage.GetScrobbleBody(pr.Player.Uuid, pr.Metadata.RatingKey)
 	switch pr.Event {
 	case "media.play", "media.resume", "playback.started":
 		action = actionStart
 		return
 	case "media.pause", "media.stop":
-		if body.Progress >= ProgressThreshold {
+		if item.Body.Progress >= ProgressThreshold {
 			action = actionStop
 		} else {
 			action = actionPause
 		}
 	case "media.scrobble":
 		action = actionStop
-		if body.Progress < ProgressThreshold {
-			body.Progress = ProgressThreshold
+		if item.Body.Progress < ProgressThreshold {
+			item.Body.Progress = ProgressThreshold
 		}
 	}
-	return
-}
-
-func parseExternalGuid(guids []plexhooks.ExternalGuid) (traktSrv, id string, err error) {
-	if len(guids) == 0 {
-		return
-	}
-	sort.Sort(SortedExternalGuid(guids))
-	guid := guids[0].Id
-	if !strings.HasPrefix(guid, TheMovieDbService) && !strings.HasPrefix(guid, TheTVDBService) {
-		err = errors.New(fmt.Sprintf("Unidentified guid: %s", guid))
-		return
-	}
-	traktSrv = guid[:4]
-	id = guid[7:]
 	return
 }
 
