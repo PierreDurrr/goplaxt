@@ -12,10 +12,11 @@ import (
 )
 
 const (
-	userPrefix      = "goplaxt:user:"
-	userMapPrefix   = "goplaxt:usermap:"
-	scrobbleFormat  = "goplaxt:scrobble:%s:%s"
-	scrobbleTimeout = 3 * time.Hour
+	userPrefix         = "goplaxt:user:"
+	userMapPrefix      = "goplaxt:usermap:"
+	accessTokenTimeout = 75 * 24 * time.Hour
+	scrobbleFormat     = "goplaxt:scrobble:%s:%s"
+	scrobbleTimeout    = 3 * time.Hour
 )
 
 // RedisStore is a storage engine that writes to redis
@@ -69,7 +70,7 @@ func (s RedisStore) Ping(ctx context.Context) error {
 
 // WriteUser will write a user object to redis
 func (s RedisStore) WriteUser(user User) {
-	oldId := s.client.Get(userMapPrefix + user.Username).String()
+	oldId := s.client.Get(userMapPrefix + user.Username).Val()
 	pipe := s.client.Pipeline()
 	data := make(map[string]interface{})
 	data["username"] = user.Username
@@ -77,7 +78,8 @@ func (s RedisStore) WriteUser(user User) {
 	data["refresh"] = user.RefreshToken
 	data["updated"] = user.Updated.Format("01-02-2006")
 	pipe.HMSet(userPrefix+user.ID, data)
-	pipe.Set(userMapPrefix+user.Username, user.ID, 0)
+	pipe.Expire(userPrefix+user.ID, accessTokenTimeout)
+	pipe.Set(userMapPrefix+user.Username, user.ID, accessTokenTimeout)
 	if oldId != "" {
 		pipe.Del(userPrefix + oldId)
 	}
