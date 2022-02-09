@@ -13,7 +13,7 @@ type Store interface {
 	GetUserByName(username string) *User
 	DeleteUser(id, username string) bool
 	GetScrobbleBody(playerUuid, ratingKey string) internal.CacheItem
-	WriteScrobbleBody(playerUuid, ratingKey string, item internal.CacheItem)
+	WriteScrobbleBody(item internal.CacheItem)
 	Ping(ctx context.Context) error
 }
 

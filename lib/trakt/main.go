@@ -96,10 +96,7 @@ func (t *Trakt) SavePlaybackProgress(playerUuid, ratingKey, state string, percen
 
 	cache.LastAction = action
 	cache.Body.Progress = percent
-	t.storage.WriteScrobbleBody(playerUuid, ratingKey, cache)
-
-	JSON, _ := json.Marshal(cache.Body)
-	go t.scrobbleRequest(action, JSON, cache.AccessToken)
+	go t.scrobbleRequest(action, cache)
 }
 
 // Handle determine if an item is a show or a movie
@@ -113,7 +110,7 @@ func (t *Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
 
 	event, cache := t.getAction(pr)
 	if cache.Body.Progress >= ProgressThreshold && cache.LastAction == actionStop && cache.AccessToken == user.AccessToken {
-		log.Print("Event already scrobbled")
+		log.Print("Event already watched")
 		return
 	} else if event == "" {
 		log.Printf("Unrecognized event: %s", pr.Event)
@@ -143,12 +140,7 @@ func (t *Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
 	cache.Body = *body
 	cache.LastAction = event
 	cache.AccessToken = user.AccessToken
-	t.storage.WriteScrobbleBody(pr.Player.Uuid, pr.Metadata.RatingKey, cache)
-
-	JSON, _ := json.Marshal(body)
-	go t.scrobbleRequest(event, JSON, user.AccessToken)
-
-	log.Print("Event logged")
+	go t.scrobbleRequest(event, cache)
 }
 
 func (t *Trakt) handleShow(pr plexhooks.PlexResponse) *internal.ScrobbleBody {
@@ -323,16 +315,17 @@ func (t *Trakt) makeRequest(url string) []map[string]interface{} {
 	return results
 }
 
-func (t *Trakt) scrobbleRequest(action string, body []byte, accessToken string) []byte {
+func (t *Trakt) scrobbleRequest(action string, item internal.CacheItem) {
 	client := &http.Client{}
 
 	URL := fmt.Sprintf("https://api.trakt.tv/scrobble/%s", action)
 
+	body, _ := json.Marshal(item.Body)
 	req, err := http.NewRequest("POST", URL, bytes.NewBuffer(body))
 	handleErr(err)
 
 	req.Header.Add("Content-Type", "application/json")
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", accessToken))
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", item.AccessToken))
 	req.Header.Add("trakt-api-version", "2")
 	req.Header.Add("trakt-api-key", t.clientId)
 
@@ -341,9 +334,18 @@ func (t *Trakt) scrobbleRequest(action string, body []byte, accessToken string) 
 		_ = Body.Close()
 	}(resp.Body)
 
-	respBody, _ := ioutil.ReadAll(resp.Body)
-
-	return respBody
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
+		respBody, _ := ioutil.ReadAll(resp.Body)
+		_ = json.Unmarshal(respBody, &item.Body)
+		t.storage.WriteScrobbleBody(item)
+		if action == actionStop {
+			log.Printf("%s watched", item.Body)
+		} else {
+			log.Printf("%s logged", item.Body)
+		}
+	} else {
+		log.Printf("%s failed (%d)", string(body), resp.StatusCode)
+	}
 }
 
 func (t *Trakt) getAction(pr plexhooks.PlexResponse) (action string, item internal.CacheItem) {

@@ -131,6 +131,8 @@ func (s RedisStore) DeleteUser(id, username string) bool {
 
 func (s RedisStore) GetScrobbleBody(playerUuid, ratingKey string) (item internal.CacheItem) {
 	item = internal.CacheItem{
+		PlayerUuid: playerUuid,
+		RatingKey:  ratingKey,
 		Body: internal.ScrobbleBody{
 			Progress: 0,
 		},
@@ -140,10 +142,13 @@ func (s RedisStore) GetScrobbleBody(playerUuid, ratingKey string) (item internal
 		return
 	}
 	_ = json.Unmarshal(cache, &item)
+	// backward compatibility
+	item.PlayerUuid = playerUuid
+	item.RatingKey = ratingKey
 	return
 }
 
-func (s RedisStore) WriteScrobbleBody(playerUuid, ratingKey string, item internal.CacheItem) {
+func (s RedisStore) WriteScrobbleBody(item internal.CacheItem) {
 	b, _ := json.Marshal(item)
-	s.client.Set(fmt.Sprintf(scrobbleFormat, playerUuid, ratingKey), b, scrobbleTimeout)
+	s.client.Set(fmt.Sprintf(scrobbleFormat, item.PlayerUuid, item.RatingKey), b, scrobbleTimeout)
 }

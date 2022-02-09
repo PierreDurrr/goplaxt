@@ -77,13 +77,15 @@ func (s DiskStore) DeleteUser(id, username string) bool {
 
 func (s DiskStore) GetScrobbleBody(playerUuid, ratingKey string) internal.CacheItem {
 	return internal.CacheItem{
+		PlayerUuid: playerUuid,
+		RatingKey:  ratingKey,
 		Body: internal.ScrobbleBody{
 			Progress: 0,
 		},
 	}
 }
 
-func (s DiskStore) WriteScrobbleBody(playerUuid, ratingKey string, item internal.CacheItem) {
+func (s DiskStore) WriteScrobbleBody(item internal.CacheItem) {
 }
 
 func (s DiskStore) writeField(id, field, value string) {
