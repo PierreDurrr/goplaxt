@@ -35,6 +35,7 @@ func New(clientId, clientSecret string, storage store.Store) *Trakt {
 		clientId:     clientId,
 		clientSecret: clientSecret,
 		storage:      storage,
+		ml:           NewMultipleLock(),
 	}
 }
 
@@ -70,8 +71,9 @@ func (t *Trakt) SavePlaybackProgress(playerUuid, ratingKey, state string, percen
 	if percent <= 0 {
 		return
 	}
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	lockKey := fmt.Sprintf("%s:%s", playerUuid, ratingKey)
+	t.ml.Lock(lockKey)
+	defer t.ml.Unlock(lockKey)
 
 	cache := t.storage.GetScrobbleBody(playerUuid, ratingKey)
 	if (cache.Body.Episode == nil && cache.Body.Movie == nil) ||
@@ -96,7 +98,7 @@ func (t *Trakt) SavePlaybackProgress(playerUuid, ratingKey, state string, percen
 
 	cache.LastAction = action
 	cache.Body.Progress = percent
-	go t.scrobbleRequest(action, cache)
+	t.scrobbleRequest(action, cache)
 }
 
 // Handle determine if an item is a show or a movie
@@ -105,8 +107,9 @@ func (t *Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
 		log.Printf("Event %s ignored", pr.Event)
 		return
 	}
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	lockKey := fmt.Sprintf("%s:%s", pr.Player.Uuid, pr.Metadata.RatingKey)
+	t.ml.Lock(lockKey)
+	defer t.ml.Unlock(lockKey)
 
 	event, cache := t.getAction(pr)
 	if cache.Body.Progress >= ProgressThreshold && cache.LastAction == actionStop && cache.AccessToken == user.AccessToken {
@@ -114,6 +117,9 @@ func (t *Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
 		return
 	} else if event == "" {
 		log.Printf("Unrecognized event: %s", pr.Event)
+		return
+	} else if event == cache.LastAction {
+		log.Print("Event already scrobbled")
 		return
 	}
 
@@ -140,7 +146,7 @@ func (t *Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
 	cache.Body = *body
 	cache.LastAction = event
 	cache.AccessToken = user.AccessToken
-	go t.scrobbleRequest(event, cache)
+	t.scrobbleRequest(event, cache)
 }
 
 func (t *Trakt) handleShow(pr plexhooks.PlexResponse) *internal.ScrobbleBody {
