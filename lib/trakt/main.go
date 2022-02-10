@@ -338,10 +338,13 @@ func (t *Trakt) scrobbleRequest(action string, item internal.CacheItem) {
 		respBody, _ := ioutil.ReadAll(resp.Body)
 		_ = json.Unmarshal(respBody, &item.Body)
 		t.storage.WriteScrobbleBody(item)
-		if action == actionStop {
-			log.Printf("%s watched", item.Body)
-		} else {
-			log.Printf("%s logged", item.Body)
+		switch action {
+		case actionStart:
+			log.Printf("%s started", item.Body)
+		case actionPause:
+			log.Printf("%s paused", item.Body)
+		case actionStop:
+			log.Printf("%s stopped", item.Body)
 		}
 	} else {
 		log.Printf("%s failed (%d)", string(body), resp.StatusCode)
