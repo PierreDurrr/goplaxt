@@ -102,7 +102,7 @@ func (t *Trakt) SavePlaybackProgress(playerUuid, ratingKey, state string, percen
 // Handle determine if an item is a show or a movie
 func (t *Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
 	if pr.Player.Uuid == "" || pr.Metadata.RatingKey == "" {
-		log.Print("Event ignored")
+		log.Printf("Event %s ignored", pr.Event)
 		return
 	}
 	t.mu.Lock()
