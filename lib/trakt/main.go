@@ -23,7 +23,7 @@ const (
 	TheTVDBService    = "tvdb"
 	TheMovieDbService = "tmdb"
 	IMDBService       = "imdb"
-	ProgressThreshold = 95
+	ProgressThreshold = 90
 
 	actionStart = "start"
 	actionPause = "pause"
