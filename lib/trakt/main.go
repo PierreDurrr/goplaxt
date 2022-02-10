@@ -96,6 +96,7 @@ func (t *Trakt) SavePlaybackProgress(playerUuid, ratingKey, state string, percen
 		return
 	}
 
+	cache.IsTimelineEnabled = true
 	cache.LastAction = action
 	cache.Body.Progress = percent
 	t.scrobbleRequest(action, cache)
@@ -112,14 +113,14 @@ func (t *Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
 	defer t.ml.Unlock(lockKey)
 
 	event, cache := t.getAction(pr)
-	if cache.Body.Progress >= ProgressThreshold && cache.LastAction == actionStop && cache.AccessToken == user.AccessToken {
-		log.Print("Event already watched")
-		return
-	} else if event == "" {
-		log.Printf("Unrecognized event: %s", pr.Event)
+	if event == "" {
+		log.Printf("Event %s ignored", pr.Event)
 		return
 	} else if event == cache.LastAction {
 		log.Print("Event already scrobbled")
+		return
+	} else if cache.Body.Progress >= ProgressThreshold && cache.LastAction == actionStop && cache.AccessToken == user.AccessToken {
+		log.Print("Event already watched")
 		return
 	}
 
@@ -144,6 +145,7 @@ func (t *Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
 
 	body.Progress = cache.Body.Progress
 	cache.Body = *body
+	cache.IsTimelineEnabled = false
 	cache.LastAction = event
 	cache.AccessToken = user.AccessToken
 	t.scrobbleRequest(event, cache)
@@ -359,6 +361,11 @@ func (t *Trakt) scrobbleRequest(action string, item internal.CacheItem) {
 
 func (t *Trakt) getAction(pr plexhooks.PlexResponse) (action string, item internal.CacheItem) {
 	item = t.storage.GetScrobbleBody(pr.Player.Uuid, pr.Metadata.RatingKey)
+	if item.IsTimelineEnabled && item.ServerUuid == pr.Server.Uuid {
+		return
+	} else {
+		item.ServerUuid = pr.Server.Uuid
+	}
 	switch pr.Event {
 	case "media.play", "media.resume", "playback.started":
 		action = actionStart
