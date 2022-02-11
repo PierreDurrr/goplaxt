@@ -102,7 +102,7 @@ func (t *Trakt) SavePlaybackProgress(playerUuid, ratingKey, state string, percen
 	cache.IsTimelineEnabled = true
 	cache.LastAction = action
 	cache.Body.Progress = percent
-	t.scrobbleRequest(action, cache)
+	t.scrobbleRequest(fmt.Sprintf("timeline.%s", state), action, cache)
 }
 
 // Handle determine if an item is a show or a movie
@@ -151,7 +151,7 @@ func (t *Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
 	cache.IsTimelineEnabled = false
 	cache.LastAction = event
 	cache.AccessToken = user.AccessToken
-	t.scrobbleRequest(event, cache)
+	t.scrobbleRequest(pr.Event, event, cache)
 }
 
 func (t *Trakt) handleShow(pr plexhooks.PlexResponse) *internal.ScrobbleBody {
@@ -326,7 +326,7 @@ func (t *Trakt) makeRequest(url string) []map[string]interface{} {
 	return results
 }
 
-func (t *Trakt) scrobbleRequest(action string, item internal.CacheItem) {
+func (t *Trakt) scrobbleRequest(trigger, action string, item internal.CacheItem) {
 	client := &http.Client{}
 
 	URL := fmt.Sprintf("https://api.trakt.tv/scrobble/%s", action)
@@ -351,14 +351,14 @@ func (t *Trakt) scrobbleRequest(action string, item internal.CacheItem) {
 		t.storage.WriteScrobbleBody(item)
 		switch action {
 		case actionStart:
-			log.Printf("%s started", item.Body)
+			log.Printf("%s started (triggered by: %s)", item.Body, trigger)
 		case actionPause:
-			log.Printf("%s paused", item.Body)
+			log.Printf("%s paused (triggered by: %s)", item.Body, trigger)
 		case actionStop:
-			log.Printf("%s stopped", item.Body)
+			log.Printf("%s stopped (triggered by: %s)", item.Body, trigger)
 		}
 	} else {
-		log.Printf("%s failed (%d)", string(body), resp.StatusCode)
+		log.Printf("%s failed (triggered by: %s, status code: %d)", string(body), trigger, resp.StatusCode)
 	}
 }
 
