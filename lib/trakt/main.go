@@ -364,11 +364,6 @@ func (t *Trakt) scrobbleRequest(action string, item internal.CacheItem) {
 
 func (t *Trakt) getAction(pr plexhooks.PlexResponse) (action string, item internal.CacheItem) {
 	item = t.storage.GetScrobbleBody(pr.Player.Uuid, pr.Metadata.RatingKey)
-	if item.IsTimelineEnabled && item.ServerUuid == pr.Server.Uuid {
-		return
-	} else {
-		item.ServerUuid = pr.Server.Uuid
-	}
 	switch pr.Event {
 	case "media.play", "media.resume", "playback.started":
 		action = actionStart
@@ -380,11 +375,15 @@ func (t *Trakt) getAction(pr plexhooks.PlexResponse) (action string, item intern
 			action = actionPause
 		}
 	case "media.scrobble":
+		if item.IsTimelineEnabled && item.ServerUuid == pr.Server.Uuid {
+			return
+		}
 		action = actionStop
 		if item.Body.Progress < ProgressThreshold {
 			item.Body.Progress = ProgressThreshold
 		}
 	}
+	item.ServerUuid = pr.Server.Uuid
 	return
 }
 
