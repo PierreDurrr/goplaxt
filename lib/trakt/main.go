@@ -125,10 +125,11 @@ func (t *Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
 	} else if cache.ServerUuid == pr.Server.Uuid && cache.AccessToken == user.AccessToken {
 		if cache.LastAction == actionStop || cache.LastAction == event {
 			log.Print("Event already scrobbled")
+			return
 		} else if pr.Event == triggerScrobble && strings.HasPrefix(cache.Trigger, triggerTimelinePrefix) {
 			log.Printf("Event %s ignored", pr.Event)
+			return
 		}
-		return
 	}
 
 	var body *internal.ScrobbleBody
