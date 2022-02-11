@@ -127,8 +127,6 @@ func (s PostgresqlStore) DeleteUser(id, username string) bool {
 
 func (s PostgresqlStore) GetScrobbleBody(playerUuid, ratingKey string) internal.CacheItem {
 	return internal.CacheItem{
-		PlayerUuid: playerUuid,
-		RatingKey:  ratingKey,
 		Body: internal.ScrobbleBody{
 			Progress: 0,
 		},

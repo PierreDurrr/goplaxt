@@ -28,6 +28,9 @@ const (
 	actionStart = "start"
 	actionPause = "pause"
 	actionStop  = "stop"
+
+	triggerScrobble       = "media.scrobble"
+	triggerTimelinePrefix = "timeline."
 )
 
 func New(clientId, clientSecret string, storage store.Store) *Trakt {
@@ -94,16 +97,15 @@ func (t *Trakt) SavePlaybackProgress(playerUuid, ratingKey, state string, percen
 	defer t.ml.Unlock(lockKey)
 
 	cache := t.storage.GetScrobbleBody(playerUuid, ratingKey)
-	if (cache.Body.Episode == nil && cache.Body.Movie == nil) ||
-		(action == cache.LastAction && cache.Body.Progress == percent) ||
-		(cache.Body.Progress >= ProgressThreshold && cache.LastAction == actionStop) {
+	if (action == cache.LastAction && cache.Body.Progress == percent) ||
+		cache.LastAction == actionStop {
 		return
 	}
 
-	cache.IsTimelineEnabled = true
+	cache.Trigger = fmt.Sprintf("%s%s", triggerTimelinePrefix, state)
 	cache.LastAction = action
 	cache.Body.Progress = percent
-	t.scrobbleRequest(fmt.Sprintf("timeline.%s", state), action, cache)
+	t.scrobbleRequest(action, cache)
 }
 
 // Handle determine if an item is a show or a movie
@@ -120,11 +122,12 @@ func (t *Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
 	if event == "" {
 		log.Printf("Event %s ignored", pr.Event)
 		return
-	} else if event == cache.LastAction {
-		log.Print("Event already scrobbled")
-		return
-	} else if cache.Body.Progress >= ProgressThreshold && cache.LastAction == actionStop && cache.AccessToken == user.AccessToken {
-		log.Print("Event already watched")
+	} else if cache.ServerUuid == pr.Server.Uuid && cache.AccessToken == user.AccessToken {
+		if cache.LastAction == actionStop || cache.LastAction == event {
+			log.Print("Event already scrobbled")
+		} else if pr.Event == triggerScrobble && strings.HasPrefix(cache.Trigger, triggerTimelinePrefix) {
+			log.Printf("Event %s ignored", pr.Event)
+		}
 		return
 	}
 
@@ -146,13 +149,16 @@ func (t *Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
 		log.Print("Event ignored")
 		return
 	}
-
 	body.Progress = cache.Body.Progress
+
+	cache.PlayerUuid = pr.Player.Uuid
+	cache.ServerUuid = pr.Server.Uuid
+	cache.RatingKey = pr.Metadata.RatingKey
+	cache.Trigger = pr.Event
 	cache.Body = *body
-	cache.IsTimelineEnabled = false
 	cache.LastAction = event
 	cache.AccessToken = user.AccessToken
-	t.scrobbleRequest(pr.Event, event, cache)
+	t.scrobbleRequest(event, cache)
 }
 
 func (t *Trakt) handleShow(pr plexhooks.PlexResponse) *internal.ScrobbleBody {
@@ -327,7 +333,7 @@ func (t *Trakt) makeRequest(url string) []map[string]interface{} {
 	return results
 }
 
-func (t *Trakt) scrobbleRequest(trigger, action string, item internal.CacheItem) {
+func (t *Trakt) scrobbleRequest(action string, item internal.CacheItem) {
 	client := &http.Client{}
 
 	URL := fmt.Sprintf("https://api.trakt.tv/scrobble/%s", action)
@@ -352,14 +358,14 @@ func (t *Trakt) scrobbleRequest(trigger, action string, item internal.CacheItem)
 		t.storage.WriteScrobbleBody(item)
 		switch action {
 		case actionStart:
-			log.Printf("%s started (triggered by: %s)", item.Body, trigger)
+			log.Printf("%s started (triggered by: %s)", item.Body, item.Trigger)
 		case actionPause:
-			log.Printf("%s paused (triggered by: %s)", item.Body, trigger)
+			log.Printf("%s paused (triggered by: %s)", item.Body, item.Trigger)
 		case actionStop:
-			log.Printf("%s stopped (triggered by: %s)", item.Body, trigger)
+			log.Printf("%s stopped (triggered by: %s)", item.Body, item.Trigger)
 		}
 	} else {
-		log.Printf("%s failed (triggered by: %s, status code: %d)", string(body), trigger, resp.StatusCode)
+		log.Printf("%s failed (triggered by: %s, status code: %d)", string(body), item.Trigger, resp.StatusCode)
 	}
 }
 
@@ -368,23 +374,18 @@ func (t *Trakt) getAction(pr plexhooks.PlexResponse) (action string, item intern
 	switch pr.Event {
 	case "media.play", "media.resume", "playback.started":
 		action = actionStart
-		return
 	case "media.pause", "media.stop":
 		if item.Body.Progress >= ProgressThreshold {
 			action = actionStop
 		} else {
 			action = actionPause
 		}
-	case "media.scrobble":
-		if item.IsTimelineEnabled && item.ServerUuid == pr.Server.Uuid {
-			return
-		}
+	case triggerScrobble:
 		action = actionStop
 		if item.Body.Progress < ProgressThreshold {
 			item.Body.Progress = ProgressThreshold
 		}
 	}
-	item.ServerUuid = pr.Server.Uuid
 	return
 }
 

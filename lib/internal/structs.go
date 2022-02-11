@@ -58,11 +58,11 @@ type ScrobbleBody struct {
 
 // CacheItem represent an item in cache
 type CacheItem struct {
-	PlayerUuid        string       `json:"player_uuid"`
-	ServerUuid        string       `json:"server_uuid"`
-	RatingKey         string       `json:"rating_key"`
-	IsTimelineEnabled bool         `json:"is_timeline_enabled"`
-	Body              ScrobbleBody `json:"body"`
-	LastAction        string       `json:"last_action"`
-	AccessToken       string       `json:"access_token"`
+	PlayerUuid  string       `json:"player_uuid"`
+	ServerUuid  string       `json:"server_uuid"`
+	RatingKey   string       `json:"rating_key"`
+	Trigger     string       `json:"trigger"`
+	Body        ScrobbleBody `json:"body"`
+	LastAction  string       `json:"last_action"`
+	AccessToken string       `json:"access_token"`
 }
