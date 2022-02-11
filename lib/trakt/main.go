@@ -74,9 +74,10 @@ func (t *Trakt) SavePlaybackProgress(playerUuid, ratingKey, state string, percen
 	var action string
 	switch state {
 	case "playing":
-		action = actionStart
 		if percent >= 100 {
-			return
+			action = actionStop
+		} else {
+			action = actionStart
 		}
 	case "paused", "stopped":
 		if percent >= ProgressThreshold {
