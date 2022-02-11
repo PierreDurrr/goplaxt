@@ -71,28 +71,31 @@ func (t *Trakt) SavePlaybackProgress(playerUuid, ratingKey, state string, percen
 	if percent <= 0 {
 		return
 	}
+	var action string
+	switch state {
+	case "playing":
+		action = actionStart
+		if percent >= 100 {
+			return
+		}
+	case "paused", "stopped":
+		if percent >= ProgressThreshold {
+			action = actionStop
+		} else {
+			action = actionPause
+		}
+	default:
+		return
+	}
+
 	lockKey := fmt.Sprintf("%s:%s", playerUuid, ratingKey)
 	t.ml.Lock(lockKey)
 	defer t.ml.Unlock(lockKey)
 
 	cache := t.storage.GetScrobbleBody(playerUuid, ratingKey)
 	if (cache.Body.Episode == nil && cache.Body.Movie == nil) ||
+		(action == cache.LastAction && cache.Body.Progress == percent) ||
 		(cache.Body.Progress >= ProgressThreshold && cache.LastAction == actionStop) {
-		return
-	}
-
-	var action string
-	switch state {
-	case "playing":
-		action = actionStart
-	case "paused", "stopped", "buffering":
-		if cache.Body.Progress >= ProgressThreshold {
-			action = actionStop
-		} else {
-			action = actionPause
-		}
-	}
-	if action == "" || (action == cache.LastAction && cache.Body.Progress == percent) {
 		return
 	}
 
