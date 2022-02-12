@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/xanderstrike/goplaxt/lib/internal"
+	"github.com/xanderstrike/goplaxt/lib/common"
 	"github.com/xanderstrike/goplaxt/lib/store"
 	"github.com/xanderstrike/plexhooks"
 )
@@ -37,7 +37,7 @@ func New(clientId, clientSecret string, storage store.Store) *Trakt {
 		clientId:     clientId,
 		clientSecret: clientSecret,
 		storage:      storage,
-		ml:           NewMultipleLock(),
+		ml:           common.NewMultipleLock(),
 	}
 }
 
@@ -131,7 +131,7 @@ func (t *Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
 		}
 	}
 
-	var body *internal.ScrobbleBody
+	var body *common.ScrobbleBody
 	switch pr.Metadata.LibrarySectionType {
 	case "show":
 		body = t.handleShow(pr)
@@ -161,10 +161,10 @@ func (t *Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
 	t.scrobbleRequest(event, cache)
 }
 
-func (t *Trakt) handleShow(pr plexhooks.PlexResponse) *internal.ScrobbleBody {
+func (t *Trakt) handleShow(pr plexhooks.PlexResponse) *common.ScrobbleBody {
 	if len(pr.Metadata.ExternalGuid) > 0 {
 		isValid := false
-		ids := internal.Ids{}
+		ids := common.Ids{}
 		for _, guid := range pr.Metadata.ExternalGuid {
 			if len(guid.Id) < 8 {
 				continue
@@ -191,8 +191,8 @@ func (t *Trakt) handleShow(pr plexhooks.PlexResponse) *internal.ScrobbleBody {
 			}
 		}
 		if isValid {
-			return &internal.ScrobbleBody{
-				Episode: &internal.Episode{
+			return &common.ScrobbleBody{
+				Episode: &common.Episode{
 					Ids: &ids,
 				},
 			}
@@ -201,10 +201,10 @@ func (t *Trakt) handleShow(pr plexhooks.PlexResponse) *internal.ScrobbleBody {
 	return t.findEpisode(pr)
 }
 
-func (t *Trakt) handleMovie(pr plexhooks.PlexResponse) *internal.ScrobbleBody {
+func (t *Trakt) handleMovie(pr plexhooks.PlexResponse) *common.ScrobbleBody {
 	if len(pr.Metadata.ExternalGuid) > 0 {
 		isValid := false
-		movie := internal.Movie{}
+		movie := common.Movie{}
 		for _, guid := range pr.Metadata.ExternalGuid {
 			if len(guid.Id) < 8 {
 				continue
@@ -231,7 +231,7 @@ func (t *Trakt) handleMovie(pr plexhooks.PlexResponse) *internal.ScrobbleBody {
 			}
 		}
 		if isValid {
-			return &internal.ScrobbleBody{
+			return &common.ScrobbleBody{
 				Movie: &movie,
 			}
 		}
@@ -241,7 +241,7 @@ func (t *Trakt) handleMovie(pr plexhooks.PlexResponse) *internal.ScrobbleBody {
 
 var episodeRegex = regexp.MustCompile(`([0-9]+)/([0-9]+)/([0-9]+)`)
 
-func (t *Trakt) findEpisode(pr plexhooks.PlexResponse) *internal.ScrobbleBody {
+func (t *Trakt) findEpisode(pr plexhooks.PlexResponse) *common.ScrobbleBody {
 	u, err := url.Parse(pr.Metadata.Guid)
 	if err != nil {
 		log.Printf("Invalid guid: %s", pr.Metadata.Guid)
@@ -266,7 +266,7 @@ func (t *Trakt) findEpisode(pr plexhooks.PlexResponse) *internal.ScrobbleBody {
 		log.Printf(fmt.Sprintf("Unmatched guid: %s", pr.Metadata.Guid))
 		return nil
 	}
-	show := internal.Show{}
+	show := common.Show{}
 	id, _ := strconv.Atoi(showID[1])
 	if srv == TheTVDBService {
 		show.Ids.Tvdb = &id
@@ -275,22 +275,22 @@ func (t *Trakt) findEpisode(pr plexhooks.PlexResponse) *internal.ScrobbleBody {
 	}
 	season, _ := strconv.Atoi(showID[2])
 	number, _ := strconv.Atoi(showID[3])
-	episode := internal.Episode{
+	episode := common.Episode{
 		Season: &season,
 		Number: &number,
 	}
-	return &internal.ScrobbleBody{
+	return &common.ScrobbleBody{
 		Show:    &show,
 		Episode: &episode,
 	}
 }
 
-func (t *Trakt) findMovie(pr plexhooks.PlexResponse) *internal.ScrobbleBody {
+func (t *Trakt) findMovie(pr plexhooks.PlexResponse) *common.ScrobbleBody {
 	if pr.Metadata.Title == "" || pr.Metadata.Year == 0 {
 		return nil
 	}
-	return &internal.ScrobbleBody{
-		Movie: &internal.Movie{
+	return &common.ScrobbleBody{
+		Movie: &common.Movie{
 			Title: &pr.Metadata.Title,
 			Year:  &pr.Metadata.Year,
 		},
@@ -323,7 +323,7 @@ func (t *Trakt) makeRequest(url string) []map[string]interface{} {
 	return results
 }
 
-func (t *Trakt) scrobbleRequest(action string, item internal.CacheItem) {
+func (t *Trakt) scrobbleRequest(action string, item common.CacheItem) {
 	client := &http.Client{}
 
 	URL := fmt.Sprintf("https://api.trakt.tv/scrobble/%s", action)
@@ -359,7 +359,7 @@ func (t *Trakt) scrobbleRequest(action string, item internal.CacheItem) {
 	}
 }
 
-func (t *Trakt) getAction(pr plexhooks.PlexResponse) (action string, item internal.CacheItem) {
+func (t *Trakt) getAction(pr plexhooks.PlexResponse) (action string, item common.CacheItem) {
 	item = t.storage.GetScrobbleBody(pr.Player.Uuid, pr.Metadata.RatingKey)
 	switch pr.Event {
 	case "media.play", "media.resume", "playback.started":

@@ -1,4 +1,4 @@
-package internal
+package common
 
 // Ids represent the IDs representing a media item accross the metadata providers
 type Ids struct {

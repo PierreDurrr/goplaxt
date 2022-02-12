@@ -1,4 +1,4 @@
-package trakt
+package common
 
 import (
 	"sync"

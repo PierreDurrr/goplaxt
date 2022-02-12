@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis"
-	"github.com/xanderstrike/goplaxt/lib/internal"
+	"github.com/xanderstrike/goplaxt/lib/common"
 )
 
 const (
@@ -125,9 +125,9 @@ func (s RedisStore) DeleteUser(id, username string) bool {
 	return err == nil
 }
 
-func (s RedisStore) GetScrobbleBody(playerUuid, ratingKey string) (item internal.CacheItem) {
-	item = internal.CacheItem{
-		Body: internal.ScrobbleBody{
+func (s RedisStore) GetScrobbleBody(playerUuid, ratingKey string) (item common.CacheItem) {
+	item = common.CacheItem{
+		Body: common.ScrobbleBody{
 			Progress: 0,
 		},
 	}
@@ -139,7 +139,7 @@ func (s RedisStore) GetScrobbleBody(playerUuid, ratingKey string) (item internal
 	return
 }
 
-func (s RedisStore) WriteScrobbleBody(item internal.CacheItem) {
+func (s RedisStore) WriteScrobbleBody(item common.CacheItem) {
 	b, _ := json.Marshal(item)
 	s.client.Set(fmt.Sprintf(scrobbleFormat, item.PlayerUuid, item.RatingKey), b, scrobbleTimeout)
 }

@@ -3,7 +3,7 @@ package store
 import (
 	"context"
 
-	"github.com/xanderstrike/goplaxt/lib/internal"
+	"github.com/xanderstrike/goplaxt/lib/common"
 )
 
 // Store is the interface for All the store types
@@ -12,8 +12,8 @@ type Store interface {
 	GetUser(id string) *User
 	GetUserByName(username string) *User
 	DeleteUser(id, username string) bool
-	GetScrobbleBody(playerUuid, ratingKey string) internal.CacheItem
-	WriteScrobbleBody(item internal.CacheItem)
+	GetScrobbleBody(playerUuid, ratingKey string) common.CacheItem
+	WriteScrobbleBody(item common.CacheItem)
 	Ping(ctx context.Context) error
 }
 

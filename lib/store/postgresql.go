@@ -10,7 +10,7 @@ import (
 
 	// Postgres db library loading
 	_ "github.com/lib/pq"
-	"github.com/xanderstrike/goplaxt/lib/internal"
+	"github.com/xanderstrike/goplaxt/lib/common"
 )
 
 // PostgresqlStore is a storage engine that writes to postgres
@@ -125,13 +125,13 @@ func (s PostgresqlStore) DeleteUser(id, username string) bool {
 	return true
 }
 
-func (s PostgresqlStore) GetScrobbleBody(playerUuid, ratingKey string) internal.CacheItem {
-	return internal.CacheItem{
-		Body: internal.ScrobbleBody{
+func (s PostgresqlStore) GetScrobbleBody(playerUuid, ratingKey string) common.CacheItem {
+	return common.CacheItem{
+		Body: common.ScrobbleBody{
 			Progress: 0,
 		},
 	}
 }
 
-func (s PostgresqlStore) WriteScrobbleBody(item internal.CacheItem) {
+func (s PostgresqlStore) WriteScrobbleBody(item common.CacheItem) {
 }

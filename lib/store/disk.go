@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/peterbourgon/diskv"
-	"github.com/xanderstrike/goplaxt/lib/internal"
+	"github.com/xanderstrike/goplaxt/lib/common"
 )
 
 // DiskStore is a storage engine that writes to the disk
@@ -75,15 +75,15 @@ func (s DiskStore) DeleteUser(id, username string) bool {
 	return true
 }
 
-func (s DiskStore) GetScrobbleBody(playerUuid, ratingKey string) internal.CacheItem {
-	return internal.CacheItem{
-		Body: internal.ScrobbleBody{
+func (s DiskStore) GetScrobbleBody(playerUuid, ratingKey string) common.CacheItem {
+	return common.CacheItem{
+		Body: common.ScrobbleBody{
 			Progress: 0,
 		},
 	}
 }
 
-func (s DiskStore) WriteScrobbleBody(item internal.CacheItem) {
+func (s DiskStore) WriteScrobbleBody(item common.CacheItem) {
 }
 
 func (s DiskStore) writeField(id, field, value string) {
