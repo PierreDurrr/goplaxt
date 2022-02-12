@@ -99,7 +99,7 @@ func (t *Trakt) SavePlaybackProgress(playerUuid, ratingKey, state string, percen
 
 	cache := t.storage.GetScrobbleBody(playerUuid, ratingKey)
 	if (action == cache.LastAction && cache.Body.Progress == percent) ||
-		cache.LastAction == actionStop {
+		cache.AccessToken == "" || cache.LastAction == actionStop {
 		return
 	}
 
