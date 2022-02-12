@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/xanderstrike/goplaxt/lib/common"
 	"github.com/xanderstrike/goplaxt/lib/store"
@@ -37,6 +38,7 @@ func New(clientId, clientSecret string, storage store.Store) *Trakt {
 		clientId:     clientId,
 		clientSecret: clientSecret,
 		storage:      storage,
+		httpClient:   &http.Client{Timeout: time.Second * 10},
 		ml:           common.NewMultipleLock(),
 	}
 }
@@ -53,7 +55,7 @@ func (t *Trakt) AuthRequest(root, username, code, refreshToken, grantType string
 	}
 	jsonValue, _ := json.Marshal(values)
 
-	resp, err := http.Post("https://api.trakt.tv/oauth/token", "application/json", bytes.NewBuffer(jsonValue))
+	resp, err := t.httpClient.Post("https://api.trakt.tv/oauth/token", "application/json", bytes.NewBuffer(jsonValue))
 	handleErr(err)
 
 	var result map[string]interface{}
@@ -298,8 +300,6 @@ func (t *Trakt) findMovie(pr plexhooks.PlexResponse) *common.ScrobbleBody {
 }
 
 func (t *Trakt) makeRequest(url string) []map[string]interface{} {
-	client := &http.Client{}
-
 	req, err := http.NewRequest("GET", url, nil)
 	handleErr(err)
 
@@ -307,7 +307,7 @@ func (t *Trakt) makeRequest(url string) []map[string]interface{} {
 	req.Header.Add("trakt-api-version", "2")
 	req.Header.Add("trakt-api-key", t.clientId)
 
-	resp, err := client.Do(req)
+	resp, err := t.httpClient.Do(req)
 	handleErr(err)
 	defer func(Body io.ReadCloser) {
 		_ = Body.Close()
@@ -324,8 +324,6 @@ func (t *Trakt) makeRequest(url string) []map[string]interface{} {
 }
 
 func (t *Trakt) scrobbleRequest(action string, item common.CacheItem) {
-	client := &http.Client{}
-
 	URL := fmt.Sprintf("https://api.trakt.tv/scrobble/%s", action)
 
 	body, _ := json.Marshal(item.Body)
@@ -337,7 +335,7 @@ func (t *Trakt) scrobbleRequest(action string, item common.CacheItem) {
 	req.Header.Add("trakt-api-version", "2")
 	req.Header.Add("trakt-api-key", t.clientId)
 
-	resp, _ := client.Do(req)
+	resp, _ := t.httpClient.Do(req)
 	defer func(Body io.ReadCloser) {
 		_ = Body.Close()
 	}(resp.Body)
