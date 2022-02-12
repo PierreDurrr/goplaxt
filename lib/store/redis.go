@@ -70,7 +70,6 @@ func (s RedisStore) Ping(ctx context.Context) error {
 
 // WriteUser will write a user object to redis
 func (s RedisStore) WriteUser(user User) {
-	oldId := s.client.Get(userMapPrefix + user.Username).Val()
 	pipe := s.client.Pipeline()
 	data := make(map[string]interface{})
 	data["username"] = user.Username
@@ -79,9 +78,7 @@ func (s RedisStore) WriteUser(user User) {
 	data["updated"] = user.Updated.Format("01-02-2006")
 	pipe.HMSet(userPrefix+user.ID, data)
 	pipe.Expire(userPrefix+user.ID, accessTokenTimeout)
-	if oldId == "" {
-		pipe.Set(userMapPrefix+user.Username, user.ID, accessTokenTimeout)
-	}
+	pipe.SetNX(userMapPrefix+user.Username, user.ID, accessTokenTimeout)
 	_, err := pipe.Exec()
 	if err != nil {
 		panic(err)
