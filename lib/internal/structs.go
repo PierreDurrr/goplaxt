@@ -16,12 +16,6 @@ type Show struct {
 	Ids   Ids     `json:"ids"`
 }
 
-// ShowInfo represent a show
-type ShowInfo struct {
-	Show    Show
-	Episode Episode
-}
-
 // Episode represent an episode
 type Episode struct {
 	Season *int    `json:"season,omitempty"`
@@ -41,11 +35,6 @@ type Movie struct {
 	Title *string `json:"title,omitempty"`
 	Year  *int    `json:"year,omitempty"`
 	Ids   Ids     `json:"ids"`
-}
-
-// MovieSearchResult represent a search result for a movie
-type MovieSearchResult struct {
-	Movie Movie
 }
 
 // ScrobbleBody represent the scrobbling status for a show or a movie

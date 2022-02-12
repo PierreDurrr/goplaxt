@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mitchellh/mapstructure"
 	"github.com/xanderstrike/goplaxt/lib/internal"
 	"github.com/xanderstrike/goplaxt/lib/store"
 	"github.com/xanderstrike/plexhooks"
@@ -287,25 +286,15 @@ func (t *Trakt) findEpisode(pr plexhooks.PlexResponse) *internal.ScrobbleBody {
 }
 
 func (t *Trakt) findMovie(pr plexhooks.PlexResponse) *internal.ScrobbleBody {
-	log.Print(fmt.Sprintf("Finding movie for %s (%d)", pr.Metadata.Title, pr.Metadata.Year))
-
-	URL := fmt.Sprintf("https://api.trakt.tv/search/movie?query=%s&fields=title", url.PathEscape(pr.Metadata.Title))
-	respBody := t.makeRequest(URL)
-
-	var results []internal.MovieSearchResult
-	err := mapstructure.Decode(respBody, &results)
-	if err != nil {
-		log.Printf("Cannot decode response: %s", respBody)
+	if pr.Metadata.Title == "" || pr.Metadata.Year == 0 {
 		return nil
 	}
-	for _, result := range results {
-		if *result.Movie.Year == pr.Metadata.Year {
-			return &internal.ScrobbleBody{
-				Movie: &result.Movie,
-			}
-		}
+	return &internal.ScrobbleBody{
+		Movie: &internal.Movie{
+			Title: &pr.Metadata.Title,
+			Year:  &pr.Metadata.Year,
+		},
 	}
-	return nil
 }
 
 func (t *Trakt) makeRequest(url string) []map[string]interface{} {
