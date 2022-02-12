@@ -79,9 +79,8 @@ func (s RedisStore) WriteUser(user User) {
 	data["updated"] = user.Updated.Format("01-02-2006")
 	pipe.HMSet(userPrefix+user.ID, data)
 	pipe.Expire(userPrefix+user.ID, accessTokenTimeout)
-	pipe.Set(userMapPrefix+user.Username, user.ID, accessTokenTimeout)
-	if oldId != "" {
-		pipe.Del(userPrefix + oldId)
+	if oldId == "" {
+		pipe.Set(userMapPrefix+user.Username, user.ID, accessTokenTimeout)
 	}
 	_, err := pipe.Exec()
 	if err != nil {
