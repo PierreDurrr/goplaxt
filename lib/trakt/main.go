@@ -104,7 +104,6 @@ func (t *Trakt) SavePlaybackProgress(playerUuid, ratingKey, state string, percen
 	}
 
 	cache.Trigger = fmt.Sprintf("%s%s", triggerTimelinePrefix, state)
-	cache.LastAction = action
 	cache.Body.Progress = percent
 	t.scrobbleRequest(action, cache)
 }
@@ -158,7 +157,6 @@ func (t *Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
 	cache.RatingKey = pr.Metadata.RatingKey
 	cache.Trigger = pr.Event
 	cache.Body = *body
-	cache.LastAction = event
 	cache.AccessToken = user.AccessToken
 	t.scrobbleRequest(event, cache)
 }
@@ -341,12 +339,16 @@ func (t *Trakt) scrobbleRequest(action string, item common.CacheItem) {
 	}(resp.Body)
 
 	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
+		lastAction := item.LastAction
+		item.LastAction = action
 		respBody, _ := ioutil.ReadAll(resp.Body)
 		_ = json.Unmarshal(respBody, &item.Body)
 		t.storage.WriteScrobbleBody(item)
 		switch action {
 		case actionStart:
-			log.Printf("%s started (triggered by: %s)", item.Body, item.Trigger)
+			if action != lastAction {
+				log.Printf("%s started (triggered by: %s)", item.Body, item.Trigger)
+			}
 		case actionPause:
 			log.Printf("%s paused (triggered by: %s)", item.Body, item.Trigger)
 		case actionStop:
