@@ -29,9 +29,6 @@ const (
 	actionStart = "start"
 	actionPause = "pause"
 	actionStop  = "stop"
-
-	triggerScrobble       = "media.scrobble"
-	triggerTimelinePrefix = "timeline."
 )
 
 func New(clientId, clientSecret string, storage store.Store) *Trakt {
@@ -72,43 +69,6 @@ func (t *Trakt) AuthRequest(root, username, code, refreshToken, grantType string
 	return result, true
 }
 
-func (t *Trakt) SavePlaybackProgress(playerUuid, ratingKey, state string, percent int) {
-	if percent <= 0 {
-		return
-	}
-	var action string
-	switch state {
-	case "playing":
-		if percent >= 100 {
-			action = actionStop
-		} else {
-			action = actionStart
-		}
-	case "paused", "stopped":
-		if percent >= ProgressThreshold {
-			action = actionStop
-		} else {
-			action = actionPause
-		}
-	default:
-		return
-	}
-
-	lockKey := fmt.Sprintf("%s:%s", playerUuid, ratingKey)
-	t.ml.Lock(lockKey)
-	defer t.ml.Unlock(lockKey)
-
-	cache := t.storage.GetScrobbleBody(playerUuid, ratingKey)
-	if (action == cache.LastAction && cache.Body.Progress == percent) ||
-		cache.AccessToken == "" || cache.LastAction == actionStop {
-		return
-	}
-
-	cache.Trigger = fmt.Sprintf("%s%s", triggerTimelinePrefix, state)
-	cache.Body.Progress = percent
-	t.scrobbleRequest(action, cache)
-}
-
 // Handle determine if an item is a show or a movie
 func (t *Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
 	if pr.Player.Uuid == "" || pr.Metadata.RatingKey == "" {
@@ -120,44 +80,48 @@ func (t *Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
 	defer t.ml.Unlock(lockKey)
 
 	event, cache := t.getAction(pr)
+	progress := int(math.Round(float64(pr.Metadata.ViewOffset) / float64(pr.Metadata.Duration) * 100.0))
+	itemChanged := true
 	if event == "" {
 		log.Printf("Event %s ignored", pr.Event)
 		return
-	} else if cache.ServerUuid == pr.Server.Uuid && cache.AccessToken == user.AccessToken {
-		if cache.LastAction == actionStop || cache.LastAction == event {
+	} else if cache.ServerUuid == pr.Server.Uuid {
+		itemChanged = false
+		if cache.AccessToken == user.AccessToken &&
+			(cache.LastAction == actionStop ||
+				(cache.LastAction == event && progress == cache.Body.Progress)) {
 			log.Print("Event already scrobbled")
-			return
-		} else if pr.Event == triggerScrobble && strings.HasPrefix(cache.Trigger, triggerTimelinePrefix) {
-			log.Printf("Event %s ignored", pr.Event)
 			return
 		}
 	}
 
-	var body *common.ScrobbleBody
-	switch pr.Metadata.LibrarySectionType {
-	case "show":
-		body = t.handleShow(pr)
-		if body == nil {
-			log.Print("Cannot find episode")
+	if itemChanged {
+		var body *common.ScrobbleBody
+		switch pr.Metadata.LibrarySectionType {
+		case "show":
+			body = t.handleShow(pr)
+			if body == nil {
+				log.Print("Cannot find episode")
+				return
+			}
+		case "movie":
+			body = t.handleMovie(pr)
+			if body == nil {
+				log.Print("Cannot find movie")
+				return
+			}
+		default:
+			log.Print("Event ignored")
 			return
 		}
-	case "movie":
-		body = t.handleMovie(pr)
-		if body == nil {
-			log.Print("Cannot find movie")
-			return
-		}
-	default:
-		log.Print("Event ignored")
-		return
+		cache.Body = *body
 	}
-	body.Progress = cache.Body.Progress
 
 	cache.PlayerUuid = pr.Player.Uuid
 	cache.ServerUuid = pr.Server.Uuid
 	cache.RatingKey = pr.Metadata.RatingKey
 	cache.Trigger = pr.Event
-	cache.Body = *body
+	cache.Body.Progress = progress
 	cache.AccessToken = user.AccessToken
 	t.scrobbleRequest(event, cache)
 }
@@ -362,7 +326,6 @@ func (t *Trakt) scrobbleRequest(action string, item common.CacheItem) {
 
 func (t *Trakt) getAction(pr plexhooks.PlexResponse) (action string, item common.CacheItem) {
 	item = t.storage.GetScrobbleBody(pr.Player.Uuid, pr.Metadata.RatingKey)
-	item.Body.Progress = int(math.Round(float64(pr.Metadata.ViewOffset) / float64(pr.Metadata.Duration) * 100.0))
 	switch pr.Event {
 	case "media.play", "media.resume", "playback.started":
 		action = actionStart
@@ -372,7 +335,7 @@ func (t *Trakt) getAction(pr plexhooks.PlexResponse) (action string, item common
 		} else {
 			action = actionPause
 		}
-	case triggerScrobble:
+	case "media.scrobble":
 		action = actionStop
 		if item.Body.Progress < ProgressThreshold {
 			item.Body.Progress = ProgressThreshold

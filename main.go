@@ -7,12 +7,10 @@ import (
 	"html/template"
 	"io/ioutil"
 	"log"
-	"math"
 	"net/http"
 	"net/url"
 	"os"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -143,23 +141,6 @@ func api(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode("success")
 }
 
-func timeline(w http.ResponseWriter, r *http.Request) {
-	clientUuid := r.Header.Get("X-Plex-Client-Identifier")
-	ratingKey := r.URL.Query().Get("ratingKey")
-	playbackTime := r.URL.Query().Get("time")
-	duration := r.URL.Query().Get("duration")
-	state := r.URL.Query().Get("state")
-
-	if clientUuid != "" && ratingKey != "" && playbackTime != "" && duration != "" {
-		tf, _ := strconv.ParseFloat(playbackTime, 64)
-		df, _ := strconv.ParseFloat(duration, 64)
-		percent := int(math.Round(tf / df * 100.0))
-		traktSrv.SavePlaybackProgress(clientUuid, ratingKey, state, percent)
-	}
-
-	_ = json.NewEncoder(w).Encode("success")
-}
-
 func allowedHostsHandler(allowedHostnames string) func(http.Handler) http.Handler {
 	allowedHosts := strings.Split(regexp.MustCompile("https://|http://|\\s+").ReplaceAllString(strings.ToLower(allowedHostnames), ""), ",")
 	log.Println("Allowed Hostnames:", allowedHosts)
@@ -230,7 +211,6 @@ func main() {
 	}
 	router.HandleFunc("/authorize", authorize).Methods("GET")
 	router.HandleFunc("/api", api).Methods("POST")
-	router.HandleFunc("/:/timeline", timeline).Methods("GET", "POST")
 	router.Handle("/healthcheck", healthcheckHandler()).Methods("GET")
 	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		tmpl := template.Must(template.ParseFiles("static/index.html"))
