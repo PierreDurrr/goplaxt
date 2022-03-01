@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -361,6 +362,7 @@ func (t *Trakt) scrobbleRequest(action string, item common.CacheItem) {
 
 func (t *Trakt) getAction(pr plexhooks.PlexResponse) (action string, item common.CacheItem) {
 	item = t.storage.GetScrobbleBody(pr.Player.Uuid, pr.Metadata.RatingKey)
+	item.Body.Progress = int(math.Round(float64(pr.Metadata.ViewOffset) / float64(pr.Metadata.Duration) * 100.0))
 	switch pr.Event {
 	case "media.play", "media.resume", "playback.started":
 		action = actionStart
