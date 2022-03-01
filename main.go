@@ -19,6 +19,7 @@ import (
 	"github.com/etherlabsio/healthcheck"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
+	"github.com/xanderstrike/goplaxt/lib/config"
 	"github.com/xanderstrike/goplaxt/lib/store"
 	"github.com/xanderstrike/goplaxt/lib/trakt"
 	"github.com/xanderstrike/plexhooks"
@@ -73,7 +74,7 @@ func authorize(w http.ResponseWriter, r *http.Request) {
 		SelfRoot:   SelfRoot(r),
 		Authorized: true,
 		URL:        url,
-		ClientID:   os.Getenv("TRAKT_ID"),
+		ClientID:   traktSrv.ClientId,
 	}
 	tmpl.Execute(w, data)
 }
@@ -213,7 +214,7 @@ func main() {
 		storage = store.NewDiskStore()
 		log.Println("Using disk storage:")
 	}
-	traktSrv = trakt.New(os.Getenv("TRAKT_ID"), os.Getenv("TRAKT_SECRET"), storage)
+	traktSrv = trakt.New(config.TraktClientId, config.TraktClientSecret, storage)
 
 	router := mux.NewRouter()
 	// Assumption: Behind a proper web server (nginx/traefik, etc) that removes/replaces trusted headers
@@ -237,7 +238,7 @@ func main() {
 			SelfRoot:   SelfRoot(r),
 			Authorized: false,
 			URL:        "https://plaxt.royxiang.me/api?id=generate-your-own-silly",
-			ClientID:   os.Getenv("TRAKT_ID"),
+			ClientID:   traktSrv.ClientId,
 		}
 		_ = tmpl.Execute(w, data)
 	}).Methods("GET")

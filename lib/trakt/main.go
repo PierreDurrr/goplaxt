@@ -36,7 +36,7 @@ const (
 
 func New(clientId, clientSecret string, storage store.Store) *Trakt {
 	return &Trakt{
-		clientId:     clientId,
+		ClientId:     clientId,
 		clientSecret: clientSecret,
 		storage:      storage,
 		httpClient:   &http.Client{Timeout: time.Second * 10},
@@ -49,7 +49,7 @@ func (t *Trakt) AuthRequest(root, username, code, refreshToken, grantType string
 	values := map[string]string{
 		"code":          code,
 		"refresh_token": refreshToken,
-		"client_id":     t.clientId,
+		"client_id":     t.ClientId,
 		"client_secret": t.clientSecret,
 		"redirect_uri":  fmt.Sprintf("%s/authorize?username=%s", root, url.PathEscape(username)),
 		"grant_type":    grantType,
@@ -304,7 +304,7 @@ func (t *Trakt) makeRequest(url string) []map[string]interface{} {
 
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("trakt-api-version", "2")
-	req.Header.Add("trakt-api-key", t.clientId)
+	req.Header.Add("trakt-api-key", t.ClientId)
 
 	resp, err := t.httpClient.Do(req)
 	handleErr(err)
@@ -332,7 +332,7 @@ func (t *Trakt) scrobbleRequest(action string, item common.CacheItem) {
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", item.AccessToken))
 	req.Header.Add("trakt-api-version", "2")
-	req.Header.Add("trakt-api-key", t.clientId)
+	req.Header.Add("trakt-api-key", t.ClientId)
 
 	resp, _ := t.httpClient.Do(req)
 	defer func(Body io.ReadCloser) {

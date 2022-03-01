@@ -8,7 +8,7 @@ import (
 )
 
 type Trakt struct {
-	clientId     string
+	ClientId     string
 	clientSecret string
 	storage      store.Store
 	httpClient   *http.Client
