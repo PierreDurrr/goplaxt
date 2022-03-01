@@ -87,9 +87,8 @@ func (t *Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
 		return
 	} else if cache.ServerUuid == pr.Server.Uuid {
 		itemChanged = false
-		if cache.AccessToken == user.AccessToken &&
-			(cache.LastAction == actionStop ||
-				(cache.LastAction == event && progress == cache.Body.Progress)) {
+		if cache.LastAction == actionStop ||
+			(cache.LastAction == event && progress == cache.Body.Progress) {
 			log.Print("Event already scrobbled")
 			return
 		}
@@ -122,8 +121,7 @@ func (t *Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
 	cache.RatingKey = pr.Metadata.RatingKey
 	cache.Trigger = pr.Event
 	cache.Body.Progress = progress
-	cache.AccessToken = user.AccessToken
-	t.scrobbleRequest(event, cache)
+	t.scrobbleRequest(event, cache, user.AccessToken)
 }
 
 func (t *Trakt) handleShow(pr plexhooks.PlexResponse) *common.ScrobbleBody {
@@ -286,7 +284,7 @@ func (t *Trakt) makeRequest(url string) []map[string]interface{} {
 	return results
 }
 
-func (t *Trakt) scrobbleRequest(action string, item common.CacheItem) {
+func (t *Trakt) scrobbleRequest(action string, item common.CacheItem, accessToken string) {
 	URL := fmt.Sprintf("https://api.trakt.tv/scrobble/%s", action)
 
 	body, _ := json.Marshal(item.Body)
@@ -294,7 +292,7 @@ func (t *Trakt) scrobbleRequest(action string, item common.CacheItem) {
 	handleErr(err)
 
 	req.Header.Add("Content-Type", "application/json")
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", item.AccessToken))
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", accessToken))
 	req.Header.Add("trakt-api-version", "2")
 	req.Header.Add("trakt-api-key", t.ClientId)
 
@@ -304,16 +302,13 @@ func (t *Trakt) scrobbleRequest(action string, item common.CacheItem) {
 	}(resp.Body)
 
 	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
-		lastAction := item.LastAction
 		item.LastAction = action
 		respBody, _ := ioutil.ReadAll(resp.Body)
 		_ = json.Unmarshal(respBody, &item.Body)
 		t.storage.WriteScrobbleBody(item)
 		switch action {
 		case actionStart:
-			if action != lastAction {
-				log.Printf("%s started (triggered by: %s)", item.Body, item.Trigger)
-			}
+			log.Printf("%s started (triggered by: %s)", item.Body, item.Trigger)
 		case actionPause:
 			log.Printf("%s paused (triggered by: %s)", item.Body, item.Trigger)
 		case actionStop:
