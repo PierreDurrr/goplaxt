@@ -79,8 +79,13 @@ func (t *Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
 	t.ml.Lock(lockKey)
 	defer t.ml.Unlock(lockKey)
 
+	var progress int
 	event, cache := t.getAction(pr)
-	progress := int(math.Round(float64(pr.Metadata.ViewOffset) / float64(pr.Metadata.Duration) * 100.0))
+	if pr.Metadata.Duration > 0 {
+		progress = int(math.Round(float64(pr.Metadata.ViewOffset) / float64(pr.Metadata.Duration) * 100.0))
+	} else {
+		progress = cache.Body.Progress
+	}
 	itemChanged := true
 	if event == "" {
 		log.Printf("Event %s ignored", pr.Event)
