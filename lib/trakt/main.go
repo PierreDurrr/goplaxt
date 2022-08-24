@@ -24,7 +24,10 @@ const (
 	TheTVDBService    = "tvdb"
 	TheMovieDbService = "tmdb"
 	IMDBService       = "imdb"
+
 	ProgressThreshold = 90
+
+	EventScrobble = "media.scrobble"
 
 	actionStart = "start"
 	actionPause = "pause"
@@ -86,6 +89,10 @@ func (t *Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
 	} else {
 		progress = cache.Body.Progress
 	}
+	if pr.Event == EventScrobble && progress < ProgressThreshold {
+		progress = ProgressThreshold
+	}
+
 	itemChanged := true
 	if event == "" {
 		log.Printf("Event %s ignored", pr.Event)
@@ -335,11 +342,8 @@ func (t *Trakt) getAction(pr plexhooks.PlexResponse) (action string, item common
 		} else {
 			action = actionPause
 		}
-	case "media.scrobble":
+	case EventScrobble:
 		action = actionStop
-		if item.Body.Progress < ProgressThreshold {
-			item.Body.Progress = ProgressThreshold
-		}
 	}
 	return
 }
