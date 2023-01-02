@@ -27,8 +27,6 @@ const (
 
 	ProgressThreshold = 90
 
-	EventScrobble = "media.scrobble"
-
 	actionStart = "start"
 	actionPause = "pause"
 	actionStop  = "stop"
@@ -82,17 +80,7 @@ func (t *Trakt) Handle(pr plexhooks.PlexResponse, user store.User) {
 	t.ml.Lock(lockKey)
 	defer t.ml.Unlock(lockKey)
 
-	var progress int
-	event, cache := t.getAction(pr)
-	if pr.Metadata.Duration > 0 {
-		progress = int(math.Round(float64(pr.Metadata.ViewOffset) / float64(pr.Metadata.Duration) * 100.0))
-	} else {
-		progress = cache.Body.Progress
-	}
-	if pr.Event == EventScrobble && progress < ProgressThreshold {
-		progress = ProgressThreshold
-	}
-
+	event, cache, progress := t.getAction(pr)
 	itemChanged := true
 	if event == "" {
 		log.Printf("Event %s ignored", pr.Event)
@@ -331,19 +319,27 @@ func (t *Trakt) scrobbleRequest(action string, item common.CacheItem, accessToke
 	}
 }
 
-func (t *Trakt) getAction(pr plexhooks.PlexResponse) (action string, item common.CacheItem) {
+func (t *Trakt) getAction(pr plexhooks.PlexResponse) (action string, item common.CacheItem, progress int) {
 	item = t.storage.GetScrobbleBody(pr.Player.Uuid, pr.Metadata.RatingKey)
+	if pr.Metadata.Duration > 0 {
+		progress = int(math.Round(float64(pr.Metadata.ViewOffset) / float64(pr.Metadata.Duration) * 100.0))
+	} else {
+		progress = item.Body.Progress
+	}
 	switch pr.Event {
 	case "media.play", "media.resume", "playback.started":
 		action = actionStart
 	case "media.pause", "media.stop":
-		if item.Body.Progress >= ProgressThreshold {
+		if progress >= ProgressThreshold {
 			action = actionStop
 		} else {
 			action = actionPause
 		}
-	case EventScrobble:
+	case "media.scrobble":
 		action = actionStop
+		if progress < ProgressThreshold {
+			progress = ProgressThreshold
+		}
 	}
 	return
 }
