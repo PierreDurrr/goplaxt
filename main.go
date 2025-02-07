@@ -116,7 +116,7 @@ func api(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tokenAge := time.Since(user.Updated).Hours()
-	if tokenAge > 1440 { // tokens expire after 3 months, so we refresh after 2
+	if tokenAge > 23 { // tokens expire after 24 hours, so we refresh after 23
 		log.Println("User access token outdated, refreshing...")
 		result, success := traktSrv.AuthRequest(SelfRoot(r), user.Username, "", user.RefreshToken, "refresh_token")
 		if success {
