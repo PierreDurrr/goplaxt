@@ -16,4 +16,5 @@ require (
 	github.com/peterbourgon/diskv v0.0.0-20180312054125-0646ccaebea1
 	github.com/stretchr/testify v1.5.1
 	github.com/xanderstrike/plexhooks v0.0.0-20220407161444-06c435c2dd83
+	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
 )

@@ -21,6 +21,7 @@ import (
 	"github.com/xanderstrike/goplaxt/lib/store"
 	"github.com/xanderstrike/goplaxt/lib/trakt"
 	"github.com/xanderstrike/plexhooks"
+	"golang.org/x/sync/singleflight"
 )
 
 var (
@@ -28,6 +29,7 @@ var (
 	commit   string
 	date     string
 	storage  store.Store
+	apiSf    *singleflight.Group
 	traktSrv *trakt.Trakt
 )
 
@@ -95,41 +97,47 @@ func api(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	username := strings.ToLower(re.Account.Title)
 	log.Print(fmt.Sprintf("Webhook call for %s (%s)", id, re.Account.Title))
 
-	user := storage.GetUser(id)
-	if user == nil {
-		log.Println("id is invalid")
-		w.WriteHeader(http.StatusForbidden)
-		return
-	}
-	username := strings.ToLower(re.Account.Title)
-	if re.Owner && username != user.Username {
-		user = storage.GetUserByName(username)
-	}
-
-	if user == nil {
-		log.Println("User not found.")
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode("user not found")
-		return
-	}
-
-	tokenAge := time.Since(user.Updated).Hours()
-	if tokenAge > 23 { // tokens expire after 24 hours, so we refresh after 23
-		log.Println("User access token outdated, refreshing...")
-		result, success := traktSrv.AuthRequest(SelfRoot(r), user.Username, "", user.RefreshToken, "refresh_token")
-		if success {
-			user.UpdateUser(result["access_token"].(string), result["refresh_token"].(string))
-			log.Println("Refreshed, continuing")
-		} else {
-			log.Println("Refresh failed, skipping and deleting user")
-			w.WriteHeader(http.StatusUnauthorized)
-			json.NewEncoder(w).Encode("fail")
-			storage.DeleteUser(user.ID, user.Username)
-			return
+	// Handle the requests of the same user one at a time
+	key := fmt.Sprintf("%s@%s", username, id)
+	userInf, err, _ := apiSf.Do(key, func() (interface{}, error) {
+		user := storage.GetUser(id)
+		if user == nil {
+			log.Println("id is invalid")
+			return nil, trakt.NewHttpError(http.StatusForbidden, "id is invalid")
 		}
+		if re.Owner && username != user.Username {
+			user = storage.GetUserByName(username)
+		}
+
+		if user == nil {
+			log.Println("User not found.")
+			return nil, trakt.NewHttpError(http.StatusNotFound, "user not found")
+		}
+
+		tokenAge := time.Since(user.Updated).Hours()
+		if tokenAge > 23 { // tokens expire after 24 hours, so we refresh after 23
+			log.Println("User access token outdated, refreshing...")
+			result, success := traktSrv.AuthRequest(SelfRoot(r), user.Username, "", user.RefreshToken, "refresh_token")
+			if success {
+				user.UpdateUser(result["access_token"].(string), result["refresh_token"].(string))
+				log.Println("Refreshed, continuing")
+			} else {
+				log.Println("Refresh failed, skipping and deleting user")
+				storage.DeleteUser(user.ID, user.Username)
+				return nil, trakt.NewHttpError(http.StatusUnauthorized, "fail")
+			}
+		}
+		return user, nil
+	})
+	if err != nil {
+		w.WriteHeader(err.(trakt.HttpError).Code)
+		json.NewEncoder(w).Encode(err.Error())
+		return
 	}
+	user := userInf.(*store.User)
 
 	if username == user.Username {
 		// FIXME - make everything take the pointer
@@ -195,6 +203,7 @@ func main() {
 		storage = store.NewDiskStore()
 		log.Println("Using disk storage:")
 	}
+	apiSf = &singleflight.Group{}
 	traktSrv = trakt.New(config.TraktClientId, config.TraktClientSecret, storage)
 
 	router := mux.NewRouter()

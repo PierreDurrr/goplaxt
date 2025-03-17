@@ -349,3 +349,14 @@ func handleErr(err error) {
 		panic(err)
 	}
 }
+
+func (e HttpError) Error() string {
+	return e.Message
+}
+
+func NewHttpError(code int, message string) HttpError {
+	return HttpError{
+		Code:    code,
+		Message: message,
+	}
+}

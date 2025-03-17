@@ -14,3 +14,8 @@ type Trakt struct {
 	httpClient   *http.Client
 	ml           common.MultipleLock
 }
+
+type HttpError struct {
+	Code    int
+	Message string
+}
