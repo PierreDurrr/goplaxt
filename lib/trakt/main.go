@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"math"
 	"net/http"
@@ -279,7 +278,7 @@ func (t *Trakt) scrobbleRequest(action string, item common.CacheItem, accessToke
 
 	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
 		item.LastAction = action
-		respBody, _ := ioutil.ReadAll(resp.Body)
+		respBody, _ := io.ReadAll(resp.Body)
 		_ = json.Unmarshal(respBody, &item.Body)
 		t.storage.WriteScrobbleBody(item)
 		switch action {

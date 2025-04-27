@@ -1,6 +1,6 @@
 module github.com/xanderstrike/goplaxt
 
-go 1.12
+go 1.16
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.3.3
