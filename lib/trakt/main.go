@@ -164,41 +164,42 @@ func (t *Trakt) handleShow(pr plexhooks.PlexResponse) *common.ScrobbleBody {
 }
 
 func (t *Trakt) handleMovie(pr plexhooks.PlexResponse) *common.ScrobbleBody {
-	if len(pr.Metadata.ExternalGuid) > 0 {
-		isValid := false
-		movie := common.Movie{}
-		for _, guid := range pr.Metadata.ExternalGuid {
-			if len(guid.Id) < 8 {
+	if len(pr.Metadata.ExternalGuid) == 0 {
+		return nil
+	}
+	isValid := false
+	movie := common.Movie{}
+	for _, guid := range pr.Metadata.ExternalGuid {
+		if len(guid.Id) < 8 {
+			continue
+		}
+		switch guid.Id[:4] {
+		case TheMovieDbService:
+			id, err := strconv.Atoi(guid.Id[7:])
+			if err != nil {
 				continue
 			}
-			switch guid.Id[:4] {
-			case TheMovieDbService:
-				id, err := strconv.Atoi(guid.Id[7:])
-				if err != nil {
-					continue
-				}
-				movie.Ids.Tmdb = &id
-				isValid = true
-			case TheTVDBService:
-				id, err := strconv.Atoi(guid.Id[7:])
-				if err != nil {
-					continue
-				}
-				movie.Ids.Tvdb = &id
-				isValid = true
-			case IMDBService:
-				id := guid.Id[7:]
-				movie.Ids.Imdb = &id
-				isValid = true
+			movie.Ids.Tmdb = &id
+			isValid = true
+		case TheTVDBService:
+			id, err := strconv.Atoi(guid.Id[7:])
+			if err != nil {
+				continue
 			}
-		}
-		if isValid {
-			return &common.ScrobbleBody{
-				Movie: &movie,
-			}
+			movie.Ids.Tvdb = &id
+			isValid = true
+		case IMDBService:
+			id := guid.Id[7:]
+			movie.Ids.Imdb = &id
+			isValid = true
 		}
 	}
-	return t.findMovie(pr)
+	if !isValid {
+		return nil
+	}
+	return &common.ScrobbleBody{
+		Movie: &movie,
+	}
 }
 
 var episodeRegex = regexp.MustCompile(`([0-9]+)/([0-9]+)/([0-9]+)`)
@@ -244,18 +245,6 @@ func (t *Trakt) findEpisode(pr plexhooks.PlexResponse) *common.ScrobbleBody {
 	return &common.ScrobbleBody{
 		Show:    &show,
 		Episode: &episode,
-	}
-}
-
-func (t *Trakt) findMovie(pr plexhooks.PlexResponse) *common.ScrobbleBody {
-	if pr.Metadata.Title == "" || pr.Metadata.Year == 0 {
-		return nil
-	}
-	return &common.ScrobbleBody{
-		Movie: &common.Movie{
-			Title: &pr.Metadata.Title,
-			Year:  &pr.Metadata.Year,
-		},
 	}
 }
 
