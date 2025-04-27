@@ -260,30 +260,6 @@ func (t *Trakt) findMovie(pr plexhooks.PlexResponse) *common.ScrobbleBody {
 	}
 }
 
-func (t *Trakt) makeRequest(url string) []map[string]interface{} {
-	req, err := http.NewRequest("GET", url, nil)
-	handleErr(err)
-
-	req.Header.Add("Content-Type", "application/json")
-	req.Header.Add("trakt-api-version", "2")
-	req.Header.Add("trakt-api-key", t.ClientId)
-
-	resp, err := t.httpClient.Do(req)
-	handleErr(err)
-	defer func(Body io.ReadCloser) {
-		_ = Body.Close()
-	}(resp.Body)
-
-	respBody, err := ioutil.ReadAll(resp.Body)
-	handleErr(err)
-
-	var results []map[string]interface{}
-	err = json.Unmarshal(respBody, &results)
-	handleErr(err)
-
-	return results
-}
-
 func (t *Trakt) scrobbleRequest(action string, item common.CacheItem, accessToken string) {
 	URL := fmt.Sprintf("https://api.trakt.tv/scrobble/%s", action)
 
