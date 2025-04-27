@@ -60,7 +60,7 @@ func (t *Trakt) AuthRequest(root, username, code, refreshToken, grantType string
 	var result map[string]interface{}
 
 	if resp.StatusCode != http.StatusOK {
-		log.Println(fmt.Sprintf("Got a %s error while refreshing :(", resp.Status))
+		log.Printf("Got a %s error while refreshing :(", resp.Status)
 		return result, false
 	}
 
@@ -221,12 +221,12 @@ func (t *Trakt) findEpisode(pr plexhooks.PlexResponse) *common.ScrobbleBody {
 		}
 	}
 	if srv == "" {
-		log.Printf(fmt.Sprintf("Unidentified guid: %s", pr.Metadata.Guid))
+		log.Printf("Unidentified guid: %s", pr.Metadata.Guid)
 		return nil
 	}
 	showID := episodeRegex.FindStringSubmatch(pr.Metadata.Guid)
 	if showID == nil {
-		log.Printf(fmt.Sprintf("Unmatched guid: %s", pr.Metadata.Guid))
+		log.Printf("Unmatched guid: %s", pr.Metadata.Guid)
 		return nil
 	}
 	show := common.Show{}
